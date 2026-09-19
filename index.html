@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sala de Revelado</title>
+<meta name="description" content="Ocho gráficos interactivos que cruzan una búsqueda personal con cifras reales sobre desaparición, salud mental y acceso bancario en Colombia.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0c0b0a;
+    --bg-soft:#141210;
+    --frame:#1c1a17;
+    --frame-line:#332e29;
+    --paper:#ece6da;
+    --paper-dim:#a89e8e;
+    --safelight:#c1443a;
+    --safelight-dim:#7a2c26;
+    --amber:#c99a4e;
+    --focus:#e8c88a;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--paper);
+    font-family:'Newsreader', Georgia, 'Times New Roman', serif;
+    -webkit-font-smoothing:antialiased;
+    line-height:1.5;
+    padding:0 16px;
+  }
+  body::before{
+    content:"";
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    z-index:0;
+    opacity:.05;
+    background-image:
+      radial-gradient(circle at 20% 30%, #fff 0, transparent 1px),
+      radial-gradient(circle at 70% 60%, #fff 0, transparent 1px),
+      radial-gradient(circle at 40% 80%, #fff 0, transparent 1px),
+      radial-gradient(circle at 90% 15%, #fff 0, transparent 1px);
+    background-size: 180px 180px, 220px 220px, 160px 160px, 200px 200px;
+  }
+
+  .wrap{
+    max-width:1180px;
+    margin:0 auto;
+    position:relative;
+    z-index:1;
+    padding-block: 56px 80px;
+  }
+
+  header.hero{
+    padding-bottom:48px;
+    border-bottom:1px solid var(--frame-line);
+    margin-bottom:48px;
+  }
+  .kicker{
+    font-family:'JetBrains Mono', monospace;
+    font-size:.72rem;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color:var(--safelight);
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:18px;
+  }
+  .kicker::before{
+    content:"";
+    width:8px;height:8px;border-radius:50%;
+    background:var(--safelight);
+    box-shadow:0 0 8px 2px var(--safelight-dim);
+    flex:none;
+  }
+  h1{
+    font-size:clamp(2.2rem, 5vw, 3.4rem);
+    font-weight:600;
+    margin:0 0 18px;
+    letter-spacing:-.01em;
+    text-wrap:balance;
+    color:var(--paper);
+  }
+  .lede{
+    max-width:62ch;
+    color:var(--paper-dim);
+    font-size:1.08rem;
+    font-style:italic;
+    margin:0 0 22px;
+  }
+  .meta-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:.72rem;
+    letter-spacing:.04em;
+    color:var(--paper-dim);
+  }
+  .meta-row span{
+    border:1px solid var(--frame-line);
+    border-radius:999px;
+    padding:5px 12px;
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));
+    gap:22px;
+  }
+
+  .frame{
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    background:var(--frame);
+    border:1px solid var(--frame-line);
+    border-radius:2px;
+    text-decoration:none;
+    color:inherit;
+    overflow:hidden;
+    transition:border-color .25s ease, transform .25s ease, box-shadow .25s ease;
+  }
+  .frame:hover, .frame:focus-visible{
+    border-color:var(--safelight-dim);
+    transform:translateY(-3px);
+    box-shadow:0 14px 32px -18px rgba(193,68,58,.55), 0 0 0 1px var(--safelight-dim) inset;
+  }
+  .frame:focus-visible{
+    outline:2px solid var(--focus);
+    outline-offset:3px;
+  }
+  .sprockets{
+    display:flex;
+    justify-content:space-between;
+    padding:8px 10px;
+    background:
+      repeating-linear-gradient(90deg, transparent 0 18px, var(--bg-soft) 18px 19px);
+    border-bottom:1px solid var(--frame-line);
+  }
+  .sprockets span{
+    width:7px;height:7px;
+    border-radius:1px;
+    background:var(--bg);
+    border:1px solid var(--frame-line);
+    flex:none;
+  }
+  .frame-body{
+    padding:20px 20px 18px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    flex:1;
+  }
+  .frame-no{
+    font-family:'JetBrains Mono', monospace;
+    font-size:.68rem;
+    letter-spacing:.1em;
+    color:var(--paper-dim);
+  }
+  .frame-title{
+    font-size:1.26rem;
+    font-weight:600;
+    color:var(--paper);
+    line-height:1.25;
+    text-wrap:balance;
+  }
+  .frame-sub{
+    font-size:.92rem;
+    color:var(--paper-dim);
+    font-style:italic;
+    flex:1;
+  }
+  .frame-tags{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-top:4px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:.66rem;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+  }
+  .tag{
+    padding:4px 9px;
+    border:1px solid var(--frame-line);
+    border-radius:999px;
+    color:var(--amber);
+  }
+  .frame-footer{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:12px 20px;
+    border-top:1px solid var(--frame-line);
+    font-family:'JetBrains Mono', monospace;
+    font-size:.72rem;
+    color:var(--paper-dim);
+  }
+  .open-cue{
+    color:var(--safelight);
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    transition:gap .2s ease;
+  }
+  .frame:hover .open-cue, .frame:focus-visible .open-cue{
+    gap:10px;
+  }
+
+  footer.site{
+    margin-top:64px;
+    padding-top:28px;
+    border-top:1px solid var(--frame-line);
+    color:var(--paper-dim);
+    font-size:.85rem;
+  }
+  footer.site p{margin:0 0 8px;}
+  footer.site .sources{
+    font-family:'JetBrains Mono', monospace;
+    font-size:.72rem;
+    letter-spacing:.02em;
+    color:var(--paper-dim);
+    opacity:.8;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .frame{transition:none;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="kicker">Luz de seguridad encendida</div>
+    <h1>Sala de Revelado</h1>
+    <p class="lede">Ocho piezas interactivas que cruzan una búsqueda personal con cifras reales sobre desaparición, salud mental y acceso bancario en Colombia. Cada una vive en su propio mundo visual — esta página solo las reúne, como negativos puestos a secar sobre la misma cuerda.</p>
+    <div class="meta-row">
+      <span>8 gráficos</span>
+      <span>UBPD</span>
+      <span>Conavi</span>
+      <span>MinSalud · SISPRO</span>
+    </div>
+  </header>
+
+  <main class="grid">
+
+    <a class="frame" href="charts/rastro-de-papa.html" target="_blank" rel="noopener">
+      <div class="sprockets">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="frame-body">
+        <div class="frame-no">F01</div>
+        <div class="frame-title">El Rastro de Papá</div>
+        <div class="frame-sub">Revelá el mapa moviendo la luz sobre la oscuridad y seguí las pistas de su paradero, un pueblo a la vez.</div>
+        <div class="frame-tags"><span class="tag">UBPD</span><span class="tag">Mapa</span></div>
+      </div>
+      <div class="frame-footer"><span>Relato</span><span class="open-cue">Abrir →</span></div>
+    </a>
+
+    <a class="frame" href="charts/desaparecidas-vs-encontradas.html" target="_blank" rel="noopener">
+      <div class="sprockets">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="frame-body">
+        <div class="frame-no">F02</div>
+        <div class="frame-title">Desaparecidas vs. Encontradas</div>
+        <div class="frame-sub">132.877 personas dadas por desaparecidas frente a 160 encontradas — casi 1 de cada 830. Acercá la lupa para verlas una por una.</div>
+        <div class="frame-tags"><span class="tag">UBPD</span><span class="tag">Barras</span></div>
+      </div>
+      <div class="frame-footer"><span>Dato duro</span><span class="open-cue">Abrir →</span></div>
+    </a>
+
+    <a class="frame" href="charts/conavi-mapa.html" target="_blank" rel="noopener">
+      <div class="sprockets">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="frame-body">
+        <div class="frame-no">F03</div>
+        <div class="frame-title">Presencia de Conavi</div>
+        <div class="frame-sub">Número de agencias por departamento antes de la fusión con Bancolombia, en un mapa de Colombia por explorar.</div>
+        <div class="frame-tags"><span class="tag">Conavi</span><span class="tag">Mapa</span></div>
+      </div>
+      <div class="frame-footer"><span>Dato duro</span><span class="open-cue">Abrir →</span></div>
+    </a>
+
+    <a class="frame" href="charts/detras-del-silencio.html" target="_blank" rel="noopener">
+      <div class="sprockets">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="frame-body">
+        <div class="frame-no">F04</div>
+        <div class="frame-title">Detrás del Silencio</div>
+        <div class="frame-sub">Salud mental en niños y adolescentes: lo que no se nota a simple vista, hasta que se mira de cerca.</div>
+        <div class="frame-tags"><span class="tag">MinSalud</span><span class="tag">Dona</span></div>
+      </div>
+      <div class="frame-footer"><span>Dato duro</span><span class="open-cue">Abrir →</span></div>
+    </a>
+
+    <a class="frame" href="charts/sintomas-viaje.html" target="_blank" rel="noopener">
+      <div class="sprockets">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="frame-body">
+        <div class="frame-no">F05</div>
+        <div class="frame-title">Síntomas del Viaje</div>
+        <div class="frame-sub">Episodios semanales reportados por el protagonista antes y después de viajar al pasado a través de la fotografía.</div>
+        <div class="frame-tags"><span class="tag">Relato</span><span class="tag">Líneas</span></div>
+      </div>
+      <div class="frame-footer"><span>Relato</span><span class="open-cue">Abrir →</span></div>
+    </a>
+
+    <a class="frame" href="charts/intensidad-sensaciones.html" target="_blank" rel="noopener">
+      <div class="sprockets">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="frame-body">
+        <div class="frame-no">F06</div>
+        <div class="frame-title">Fuga de Memoria</div>
+        <div class="frame-sub">Lo que sintió al viajar al pasado, comparado con lo que hoy recuerda de eso mismo. La memoria no siempre coincide.</div>
+        <div class="frame-tags"><span class="tag">Relato</span><span class="tag">Líneas</span></div>
+      </div>
+      <div class="frame-footer"><span>Relato</span><span class="open-cue">Abrir →</span></div>
+    </a>
+
+    <a class="frame" href="charts/cada-pedazo-de-cerca.html" target="_blank" rel="noopener">
+      <div class="sprockets">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="frame-body">
+        <div class="frame-no">F07</div>
+        <div class="frame-title">Cada Pedazo de Cerca</div>
+        <div class="frame-sub">¿Por qué dejó de usar la cámara de rollo? Tirá de una porción del pastel para hacer zoom y leer su historia.</div>
+        <div class="frame-tags"><span class="tag">Relato</span><span class="tag">Circular</span></div>
+      </div>
+      <div class="frame-footer"><span>Relato</span><span class="open-cue">Abrir →</span></div>
+    </a>
+
+    <a class="frame" href="charts/rollos-revelados.html" target="_blank" rel="noopener">
+      <div class="sprockets">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="frame-body">
+        <div class="frame-no">F08</div>
+        <div class="frame-title">Rollos Revelados</div>
+        <div class="frame-sub">Cantidad de rollos revelados a través de los años, con una antorcha que sigue al cursor y una foto que se degrada con el tiempo.</div>
+        <div class="frame-tags"><span class="tag">Relato</span><span class="tag">Líneas</span></div>
+      </div>
+      <div class="frame-footer"><span>Relato</span><span class="open-cue">Abrir →</span></div>
+    </a>
+
+  </main>
+
+  <footer class="site">
+    <p>Cada gráfico es autónomo: su propia paleta, su propia forma de interactuar. Esta página es solo el índice.</p>
+    <p class="sources">Fuentes de datos reales: UBPD (Unidad de Búsqueda de Personas dadas por Desaparecidas) · Conavi / Bancolombia · MinSalud — SISPRO, 2015.</p>
+  </footer>
+
+</div>
+</body>
+</html>
