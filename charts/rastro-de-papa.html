@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>El Rastro de Papá</title>
+<style>
+  :root{
+    --bg:#0a0a0c;
+    --ink:#eae6df;
+    --ink-dim:#9a978f;
+    --accent:#c98f8f;
+    --accent-soft:#c98f8f66;
+    --amber:#d1a35c;
+    --panel:#141519;
+    --panel-edge:#232530;
+  }
+  /* Deliberately single dark world (a darkroom) — no light-theme variant. */
+
+  *{box-sizing:border-box;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Newsreader', Georgia, 'Times New Roman', serif;
+    padding-inline:16px;
+    padding-block:calc(20px + env(safe-area-inset-top,0px)) calc(28px + env(safe-area-inset-bottom,0px));
+    position:relative;
+  }
+  body::after{
+    content:"";
+    position:fixed; inset:0; pointer-events:none; z-index:50;
+    opacity:.05; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .wrap{ max-width:1180px; margin-inline:auto; }
+
+  header{
+    display:flex; justify-content:space-between; align-items:flex-start;
+    gap:12px; margin-bottom:14px; flex-wrap:wrap;
+  }
+  .titleblock h1{
+    font-family:'Special Elite', 'Courier New', monospace;
+    font-size:clamp(1.15rem, 3.4vw, 1.55rem);
+    font-weight:400; letter-spacing:.02em; margin:0 0 6px;
+    color:var(--ink);
+    text-wrap:balance;
+  }
+  .instruction{
+    font-family:'Special Elite','Courier New',monospace;
+    font-size:.72rem; letter-spacing:.04em; color:var(--ink-dim);
+    text-transform:uppercase; margin:0;
+    transition:opacity .8s ease;
+  }
+  .instruction.hidden-hint{ opacity:0; }
+
+  .counter{
+    font-family:'Special Elite','Courier New',monospace;
+    font-size:.85rem; letter-spacing:.06em; color:var(--amber);
+    border:1px solid var(--panel-edge); background:var(--panel);
+    padding:6px 12px; border-radius:3px; white-space:nowrap;
+    font-variant-numeric:tabular-nums;
+  }
+  .counter b{ color:var(--ink); font-weight:600; }
+
+  .layout{ display:flex; flex-direction:column; gap:16px; }
+
+  .stage-frame{
+    width:100%;
+    border:1px solid var(--panel-edge);
+    border-radius:4px;
+    padding:6px;
+    background:var(--panel);
+    box-shadow:0 30px 60px -30px rgba(0,0,0,.7);
+  }
+  .stage{
+    position:relative;
+    width:100%;
+    aspect-ratio:1016/1150;
+    background:#000;
+    overflow:hidden;
+    border-radius:2px;
+    cursor:none;
+    touch-action:none;
+  }
+  .stage canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+  .stage svg.route-overlay{ position:absolute; inset:0; width:100%; height:100%; display:block; pointer-events:none; }
+  .route-overlay .route{
+    fill:none; stroke:var(--accent-soft); stroke-width:2.2;
+    stroke-dasharray:3 9; stroke-linecap:round;
+  }
+
+  .brush-ring{
+    position:absolute; width:0; height:0; border-radius:50%;
+    left:-400px; top:-400px;
+    border:1px solid var(--accent-soft);
+    box-shadow:0 0 14px 1px rgba(0,0,0,.5);
+    pointer-events:none;
+  }
+
+  .hotspot{
+    position:absolute; width:30px; height:30px; margin:-15px 0 0 -15px;
+    border-radius:50%; background:transparent; border:none; padding:0;
+    cursor:pointer;
+  }
+  .hotspot:focus-visible{ outline:2px solid var(--amber); outline-offset:3px; }
+  .hotspot.seen:not(.read)::after{
+    content:"";
+    position:absolute; inset:6px; border-radius:50%;
+    border:1px solid var(--accent);
+    animation:invite 2.2s ease-out infinite;
+  }
+  @keyframes invite{
+    0%{ transform:scale(1); opacity:.7; }
+    100%{ transform:scale(2.6); opacity:0; }
+  }
+
+  .hint-pulse{
+    position:absolute; left:50%; top:50%; width:16px; height:16px;
+    margin:-8px 0 0 -8px; border-radius:50%;
+    border:1px solid var(--ink-dim); opacity:.35;
+    animation:pulse 2.6s ease-out infinite;
+    pointer-events:none;
+  }
+  @keyframes pulse{
+    0%{ transform:scale(1); opacity:.4; }
+    100%{ transform:scale(7); opacity:0; }
+  }
+  .stage.touched .hint-pulse{ display:none; }
+
+  .panel{
+    width:100%;
+    border:1px solid var(--panel-edge); background:var(--panel); border-radius:4px;
+    padding:14px 15px;
+  }
+  .panel h2{
+    font-family:'Special Elite','Courier New',monospace; font-weight:400;
+    font-size:.78rem; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink-dim); margin:0 0 12px;
+  }
+  .panel-empty{
+    font-size:.85rem; line-height:1.5; color:var(--ink-dim); font-style:italic;
+  }
+  .panel-list{ display:flex; flex-direction:column; gap:10px; max-height:320px; overflow-y:auto; }
+  .clue-card{
+    background:#0d0e11; border:1px solid var(--panel-edge); border-radius:3px;
+    padding:11px 12px 12px;
+    opacity:0; transform:translateY(8px);
+    animation:rise .6s ease forwards;
+  }
+  @keyframes rise{ to{ opacity:1; transform:translateY(0); } }
+  .clue-card .tag{
+    font-family:'Special Elite','Courier New',monospace;
+    font-size:.6rem; letter-spacing:.05em; text-transform:uppercase;
+    color:var(--amber); margin-bottom:5px;
+  }
+  .clue-card .tag .n{ color:var(--ink-dim); margin-right:5px; }
+  .clue-card .witness{
+    font-size:.68rem; color:var(--ink-dim); margin-bottom:5px; font-style:normal;
+  }
+  .clue-card p{
+    margin:0; font-size:.85rem; line-height:1.42; font-style:italic; color:var(--ink);
+  }
+
+  .closing{
+    margin-top:16px; padding:16px 18px; border:1px solid var(--panel-edge);
+    background:var(--panel); border-radius:4px;
+    opacity:0; max-height:0; overflow:hidden;
+    transition:opacity .9s ease, max-height .9s ease;
+  }
+  .closing.show{ opacity:1; max-height:260px; }
+  .closing h2{
+    font-family:'Special Elite','Courier New',monospace; font-weight:400;
+    font-size:.95rem; color:var(--ink); margin:0 0 8px; letter-spacing:.02em;
+  }
+  .closing p{ margin:0 0 6px; font-size:.92rem; line-height:1.5; color:var(--ink-dim); }
+  .closing p:last-child{ margin-bottom:0; }
+  .closing .stat{ color:var(--accent); font-weight:600; }
+  .closing .found-stat{ color:var(--amber); font-weight:600; }
+  .closing .src{ font-size:.72rem; color:var(--ink-dim); opacity:.7; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:.01ms !important; transition-duration:.01ms !important; }
+  }
+
+  .panel-list{ max-height:320px; }
+
+  @media (min-width:761px){
+    .layout{ flex-direction:row; align-items:flex-start; }
+    .stage-frame{ flex:1 1 620px; min-width:0; width:auto; }
+    .panel{ flex:0 0 300px; width:300px; }
+    .panel-list{ max-height:560px; }
+  }
+</style>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,500;1,400;1,500&family=Special+Elite&display=swap" rel="stylesheet">
+
+<div class="wrap">
+  <header>
+    <div class="titleblock">
+      <h1>El rastro de papá</h1>
+      <p class="instruction" id="instruction">Mueve el cursor sobre la oscuridad para revelar el mapa</p>
+    </div>
+    <div class="counter" aria-live="polite"><b id="count">0</b> / 7 pistas leídas</div>
+  </header>
+
+  <div class="layout">
+    <div class="stage-frame">
+      <div class="stage" id="stage">
+        <canvas id="mapCanvas"></canvas>
+        <svg class="route-overlay" viewBox="0 0 1016 1150" aria-hidden="true">
+          <path class="route" id="route-path" d=""/>
+        </svg>
+        <div class="brush-ring" id="brushRing"></div>
+        <div class="hint-pulse" id="hintPulse"></div>
+        <div id="hotspots"></div>
+      </div>
+    </div>
+
+    <aside class="panel" aria-live="polite">
+      <h2>Expediente</h2>
+      <p class="panel-empty" id="panelEmpty">Pasa la luz sobre el mapa hasta que aparezca un punto, y tócalo para leer lo que se sabe.</p>
+      <div class="panel-list" id="panelList"></div>
+    </aside>
+  </div>
+
+  <div class="closing" id="closing">
+    <h2>Expediente cerrado. Sin confirmar.</h2>
+    <p>Siete lugares posibles, siete voces que no están seguras del todo. Ninguna certeza sobre dónde está, o si sigue en algún sitio.</p>
+    <p>En Colombia hay <span class="stat">132.877</span> personas dadas por desaparecidas. Solo <span class="found-stat">160</span> han sido encontradas.</p>
+    <p class="src">Fuente: UBPD — Unidad de Búsqueda de Personas dadas por Desaparecidas.</p>
+  </div>
+</div>
+
+<script>
+(function(){
+  var VB_W = 1016, VB_H = 1150;
+  var BRUSH_R = 50;      // reveal / brush radius, in logical (viewBox) units
+  var NEAR_R  = 50;      // distance at which a town becomes "seen" through the fog
+
+  var TOWNS = [{"name": "Turbo", "witness": "Un excompañero de trabajo", "text": "Dice que lo vio bajar de una chalupa en el muelle, con la cámara colgada al cuello como siempre. Cree que era jueves.", "x": 131.27, "y": 859.74}, {"name": "Necoclí", "witness": "Una vendedora de la playa", "text": "Aseguró haberlo visto tomando fotos del atardecer, solo, sentado en la arena. No cruzaron palabra.", "x": 101.81, "y": 697.11}, {"name": "Montería", "witness": "Tía Marta", "text": "Lo vio en el mercado, comiendo una empanada. Dijo que iba tranquilo, silbando bajito.", "x": 541.18, "y": 539.2}, {"name": "Lorica", "witness": "Un vecino", "text": "Recuerda haber hablado con él frente a la iglesia. Le contó que estaba revelando un rollo viejo, de hacía años.", "x": 573.59, "y": 300.59}, {"name": "Coveñas", "witness": "El dueño de un estudio fotográfico", "text": "Cree recordar a un hombre parecido preguntando por rollos de 35 mm. No está seguro de la fecha.", "x": 638.75, "y": 219.95}, {"name": "Tolú", "witness": "Un pescador", "text": "Compartió una cerveza con un hombre que encajaba con su descripción. Dice que hablaba de volver pronto a casa.", "x": 685.92, "y": 157.72}, {"name": "Sincelejo", "witness": "El vendedor de tiquetes de la terminal", "text": "La última vez que alguien dice haberlo visto fue aquí, comprando un pasaje. Nadie sabe hacia dónde.", "x": 775.11, "y": 267.51}];
+  var DEPTS = [{"name": "Antioquia", "d": "M1015.91,1150.00L1015.91,852.25L1009.97,856.57L1004.31,866.65L1000.83,869.54L991.23,866.93L983.12,859.90L978.48,861.07L964.57,870.44L945.42,880.49L932.69,880.64L922.30,878.23L910.91,880.27L892.49,878.95L887.21,881.85L878.81,881.56L874.75,880.68L865.77,875.12L859.10,876.58L852.63,886.19L851.81,892.14L848.59,898.53L841.31,907.27L834.25,909.56L831.57,915.21L827.60,917.40L824.33,923.48L814.54,932.62L804.92,930.42L803.06,950.06L797.85,962.80L793.87,966.18L781.16,970.21L775.07,974.60L768.25,981.00L765.48,986.40L761.16,983.96L747.83,987.18L745.23,992.44L743.20,1010.57L734.50,1023.73L734.50,1031.92L729.58,1040.38L727.11,1044.32L705.07,1050.17L700.73,1051.92L698.03,1055.23L695.71,1074.33L691.06,1081.45L691.66,1088.39L690.19,1092.20L685.62,1098.00L675.86,1101.17L676.06,1109.93L661.35,1110.88L641.62,1102.55L637.13,1108.66L631.45,1110.74L623.37,1110.04L608.87,1095.80L600.44,1098.67L599.14,1101.57L598.93,1113.93L594.84,1118.16L593.79,1122.62L595.73,1135.25L587.80,1143.30L591.68,1150.00L264.14,1150.00L259.49,1141.89L249.57,1133.71L242.86,1124.91L237.14,1109.05L239.66,1087.42L247.18,1072.16L247.44,1042.52L243.82,1031.98L244.18,1027.80L249.40,1024.68L250.90,1020.81L250.25,1014.15L253.52,995.10L252.71,988.18L256.73,981.67L258.23,976.01L261.43,971.78L264.96,970.33L272.27,957.05L280.75,949.70L283.23,907.68L277.26,897.56L277.24,894.20L282.56,871.40L286.26,865.62L295.24,860.25L298.00,856.30L301.41,840.12L306.92,827.11L316.86,820.78L318.46,814.81L318.04,804.61L320.80,802.31L322.88,796.06L328.54,770.80L336.29,763.17L337.77,751.80L352.07,737.60L362.00,729.57L391.34,714.11L391.81,710.30L390.21,706.37L381.06,690.96L382.04,678.95L380.60,661.34L378.36,653.77L370.34,639.25L370.43,634.36L376.16,628.20L376.04,625.68L366.50,626.13L363.05,622.76L360.58,607.31L355.02,602.39L354.42,595.66L346.73,588.79L329.92,584.84L318.68,590.13L306.92,554.60L290.46,541.04L284.46,540.26L282.69,535.21L297.80,519.18L283.73,470.79L283.72,479.40L280.36,485.41L276.49,488.83L252.29,501.80L248.17,506.79L237.04,513.15L234.89,524.32L214.14,536.51L179.14,548.34L180.26,552.99L174.98,558.41L177.52,564.71L176.94,568.89L169.84,577.75L152.46,584.70L108.66,595.68L73.63,601.02L56.10,601.76L55.10,611.89L52.11,617.15L30.03,636.29L31.96,644.40L36.19,648.58L39.01,647.39L34.75,645.02L33.11,639.92L37.00,640.97L39.10,639.92L42.58,644.72L75.43,657.29L84.31,663.12L93.77,675.03L102.57,700.07L109.78,700.78L116.50,711.52L117.48,717.64L116.00,732.90L118.95,738.05L119.31,746.23L109.46,776.35L111.64,780.06L116.14,782.35L118.34,788.34L118.82,798.56L120.60,800.38L121.79,810.40L126.56,825.07L123.77,838.90L118.80,845.85L118.93,849.00L123.57,856.16L120.93,847.98L123.06,848.98L123.76,847.38L125.84,851.13L126.43,857.12L124.37,874.16L126.32,874.18L129.28,871.17L127.74,861.55L131.38,861.26L129.20,862.29L133.72,865.57L137.80,875.37L135.97,886.19L133.44,887.71L131.50,892.76L127.04,896.96L127.78,905.34L130.30,907.09L132.39,914.92L130.29,919.01L123.56,924.15L126.33,932.96L123.31,936.02L119.76,936.57L122.58,940.63L121.80,944.71L119.36,946.81L99.26,952.51L69.04,952.85L66.49,954.60L64.17,952.85L41.77,948.40L37.37,945.86L33.43,938.73L32.63,933.50L35.00,910.96L38.43,906.94L35.12,902.63L36.75,899.85L35.47,898.83L36.80,892.61L39.88,892.48L40.08,889.40L43.33,885.19L52.27,883.45L57.32,885.14L60.36,890.13L61.20,895.39L64.88,893.01L66.51,893.98L66.17,895.78L71.48,894.53L76.64,896.81L77.69,894.66L76.57,893.00L66.90,887.64L68.61,884.68L65.33,884.08L64.90,882.22L62.12,882.70L60.38,880.44L62.46,878.95L71.53,877.98L76.39,882.77L76.91,881.09L78.14,881.80L78.95,884.80L81.24,883.33L80.29,880.82L81.72,882.98L82.43,882.11L77.85,877.50L65.43,876.06L61.73,872.00L65.04,869.48L75.66,867.77L82.58,861.63L79.69,859.55L78.77,862.28L73.15,862.73L70.30,861.09L71.21,855.13L69.18,850.91L71.24,846.54L78.36,845.78L80.00,843.86L88.21,841.15L93.56,843.08L85.43,838.62L80.35,840.82L80.48,837.60L62.62,842.12L51.88,841.29L54.52,849.51L47.75,856.39L36.01,861.49L33.30,861.28L31.06,856.67L28.73,856.09L30.82,855.67L30.21,851.00L23.11,844.38L24.05,835.14L27.30,830.20L26.40,825.99L27.70,827.00L27.45,824.36L31.35,824.70L32.42,828.29L35.40,826.14L32.03,822.42L33.16,820.86L38.19,821.83L36.87,819.27L43.07,818.36L29.19,817.90L36.24,806.94L34.95,804.45L34.79,808.73L28.09,803.68L30.27,808.43L32.29,809.34L29.50,817.09L27.70,817.84L25.94,815.88L23.29,816.79L20.97,815.74L16.23,805.33L17.03,796.77L14.63,792.47L16.02,791.55L15.39,786.81L17.41,786.26L17.93,789.55L20.30,788.97L21.29,790.80L24.34,782.92L27.35,784.81L26.63,786.23L27.77,784.43L18.19,780.61L9.76,781.40L10.47,793.46L16.22,811.63L24.23,822.55L21.67,847.27L19.11,848.78L15.47,841.05L11.11,841.24L6.72,854.29L9.93,857.44L16.18,859.54L17.40,869.53L20.34,867.76L25.28,873.21L22.05,885.42L14.27,890.28L5.87,890.81L2.82,894.38L0.09,903.45L0.09,1074.20L4.26,1079.87L6.29,1085.68L27.33,1094.75L62.08,1126.07L82.59,1139.61L84.42,1143.16L83.59,1146.84L88.49,1150.00L1015.91,1150.00ZM38.09,810.24L35.07,812.27L32.79,817.29L43.01,817.68L41.78,816.76L42.90,812.24L38.09,810.24Z"}, {"name": "Bolívar", "d": "M391.67,228.51L397.43,231.65L398.55,227.18L400.17,226.74L400.09,221.67L396.21,221.92L392.37,224.23L391.67,228.51ZM552.73,27.74L553.73,30.40L566.93,29.48L567.78,27.44L559.88,25.01L559.10,26.32L560.57,26.46L557.70,27.85L556.34,26.74L558.65,26.60L558.97,24.77L556.17,24.15L555.80,22.03L553.33,24.82L555.05,24.72L555.23,26.83L555.86,24.05L555.51,28.71L555.25,27.37L553.74,29.74L552.73,27.74ZM1015.91,0.00L806.70,0.00L806.57,4.30L801.45,17.17L798.60,19.50L798.72,21.83L805.20,25.86L805.73,28.20L803.50,31.71L803.81,36.04L799.90,51.18L795.02,55.28L791.27,62.11L793.19,63.76L793.23,77.24L792.89,79.17L787.41,82.50L785.60,96.44L790.14,96.85L790.74,98.71L787.08,108.19L791.80,104.21L792.98,100.10L800.98,101.34L807.76,108.75L804.95,110.27L804.13,116.39L805.36,117.10L810.44,114.80L815.22,97.05L822.30,95.44L822.53,88.37L833.81,80.37L838.16,81.98L836.59,85.15L837.11,87.91L844.90,93.45L850.14,94.02L855.39,100.11L856.87,97.84L864.25,99.20L865.82,97.14L868.97,97.30L880.59,103.48L887.91,99.99L885.63,103.95L876.29,107.83L880.49,111.25L880.16,121.81L887.37,116.53L889.19,117.42L888.73,119.56L895.16,124.19L901.74,124.08L903.84,130.40L903.12,132.49L910.15,135.50L913.19,138.72L917.40,139.52L918.53,142.46L926.46,149.40L926.09,152.03L929.22,155.20L939.82,155.13L943.52,152.21L946.96,151.77L952.49,156.31L960.31,157.02L952.62,164.92L953.33,171.08L950.11,183.07L953.61,192.60L957.43,191.07L960.30,191.91L966.38,198.11L975.20,200.83L1003.43,199.14L1008.03,200.35L1011.51,204.42L1015.91,205.97L1015.91,210.68L1009.49,213.49L1004.41,224.54L1006.74,227.32L1006.54,229.98L1004.06,232.53L1002.79,237.64L997.08,245.69L992.86,247.99L994.93,252.92L1001.66,257.02L1000.95,262.42L995.32,267.01L993.26,273.67L999.92,280.02L1001.24,291.39L1006.11,293.36L1010.45,300.39L1008.44,306.02L1009.47,311.40L1007.96,321.05L1012.69,323.48L1013.44,327.03L1015.91,328.68L1015.91,0.00Z"}, {"name": "Sucre", "d": "M670.33,0.00L669.89,2.80L671.40,4.70L668.49,5.68L667.78,15.25L664.09,27.24L656.13,36.98L657.49,42.35L656.15,45.23L639.40,57.00L639.20,60.34L634.89,62.21L634.62,66.03L627.11,73.97L632.50,71.07L651.08,70.01L655.39,71.00L662.32,76.98L668.64,75.27L671.81,76.99L679.90,94.27L685.96,100.60L688.05,105.03L691.31,118.87L690.56,137.36L678.74,176.53L665.26,200.48L656.23,210.25L651.75,211.28L642.00,218.34L638.38,219.00L630.72,214.98L630.81,221.73L635.20,225.25L631.02,228.76L623.24,240.67L632.24,243.32L637.68,238.74L636.54,244.61L644.09,253.32L648.31,253.05L653.78,255.12L659.35,247.36L664.95,244.06L667.66,249.65L672.19,251.61L673.24,256.35L680.20,264.65L689.19,266.41L690.07,272.40L695.40,278.19L698.08,286.14L704.15,290.07L718.57,288.48L724.08,281.47L726.10,282.82L723.93,287.08L727.41,289.29L728.03,294.11L729.93,296.31L732.16,293.78L735.78,294.20L736.81,290.92L745.92,290.77L746.40,295.62L739.54,316.49L742.35,319.29L740.80,321.91L745.43,324.35L747.28,327.88L753.33,332.81L763.29,336.06L763.09,338.82L760.60,341.03L761.92,349.08L768.94,346.89L774.02,348.69L783.00,343.25L786.69,350.19L791.93,354.56L794.51,354.76L798.83,352.15L802.30,352.57L805.75,356.88L811.75,358.45L818.50,368.07L825.86,368.99L824.62,383.55L830.52,382.68L836.46,379.73L848.31,380.78L860.30,392.55L866.78,393.53L868.47,397.90L865.21,397.69L859.60,405.04L855.38,406.07L858.22,407.12L870.39,419.37L876.75,422.78L882.97,434.68L871.07,431.72L868.48,432.70L867.44,447.12L868.93,457.30L863.80,457.37L857.56,464.77L850.86,467.81L845.27,468.62L838.22,466.20L837.53,474.95L834.35,475.01L835.10,477.56L827.11,479.30L822.06,483.68L815.99,475.42L810.31,481.08L800.32,481.21L789.64,486.57L786.64,486.61L787.88,502.75L789.18,502.96L789.01,518.59L793.09,524.57L798.40,528.02L799.94,531.90L806.65,537.03L812.37,536.85L814.80,539.08L806.55,541.31L804.19,543.88L806.25,550.44L801.47,557.59L805.23,570.34L799.57,578.71L799.95,582.54L804.98,587.34L808.48,585.82L807.24,590.41L802.20,591.45L802.44,594.23L804.11,602.86L807.19,605.64L813.57,617.62L813.56,623.50L811.16,625.70L809.31,632.67L809.24,641.18L810.56,650.34L813.42,653.01L812.87,656.07L816.77,668.63L844.92,677.70L847.04,680.20L849.89,680.74L861.50,689.96L869.53,702.61L878.76,711.47L882.04,710.86L891.04,704.86L905.73,699.91L932.42,682.64L944.26,676.87L972.10,671.35L987.65,664.18L999.50,666.09L1001.87,674.46L1005.27,671.21L1007.20,672.87L1010.83,673.01L1009.21,676.94L1015.91,682.64L1015.91,328.68L1013.44,327.03L1012.69,323.48L1007.96,321.05L1009.47,311.40L1008.44,306.02L1010.45,300.39L1006.11,293.36L1001.24,291.39L999.92,280.02L993.26,273.67L995.32,267.01L1000.95,262.42L1001.66,257.02L994.93,252.92L992.86,247.99L997.08,245.69L1002.79,237.64L1004.06,232.53L1006.54,229.98L1006.74,227.32L1004.41,224.54L1009.49,213.49L1015.91,210.68L1015.91,205.97L1011.51,204.42L1008.03,200.35L1003.43,199.14L975.20,200.83L966.38,198.11L960.30,191.91L957.43,191.07L953.61,192.60L950.11,183.07L953.33,171.08L952.62,164.92L960.31,157.02L952.49,156.31L946.96,151.77L943.52,152.21L939.82,155.13L929.22,155.20L926.09,152.03L926.46,149.40L918.53,142.46L917.40,139.52L913.19,138.72L910.15,135.50L903.12,132.49L903.84,130.40L901.74,124.08L895.16,124.19L888.73,119.56L889.19,117.42L887.37,116.53L880.16,121.81L880.49,111.25L876.29,107.83L885.63,103.95L887.91,99.99L880.59,103.48L868.97,97.30L865.82,97.14L864.25,99.20L856.87,97.84L855.39,100.11L850.14,94.02L844.90,93.45L837.11,87.91L836.59,85.15L838.16,81.98L833.81,80.37L822.53,88.37L822.30,95.44L815.22,97.05L810.44,114.80L808.34,114.92L808.08,116.56L804.13,116.39L804.95,110.27L807.76,108.75L800.98,101.34L792.98,100.10L791.80,104.21L787.08,108.19L790.74,98.71L790.14,96.85L785.60,96.44L787.41,82.50L792.89,79.17L793.23,77.24L793.19,63.76L791.27,62.11L795.02,55.28L799.90,51.18L803.81,36.04L803.50,31.71L805.73,28.20L805.20,25.86L798.72,21.83L798.60,19.50L801.45,17.17L806.57,4.30L806.70,0.00L670.33,0.00Z"}, {"name": "Córdoba", "d": "M1015.91,682.64L1009.21,676.94L1010.83,673.01L1007.20,672.87L1005.27,671.21L1001.87,674.46L999.50,666.09L987.65,664.18L972.10,671.35L944.26,676.87L932.42,682.64L905.73,699.91L891.04,704.86L882.04,710.86L878.76,711.47L869.53,702.61L861.50,689.96L849.89,680.74L847.04,680.20L844.92,677.70L816.77,668.63L812.87,656.07L813.42,653.01L810.56,650.34L809.24,641.18L809.31,632.67L811.16,625.70L813.56,623.50L813.57,617.62L807.19,605.64L804.11,602.86L802.44,594.23L802.20,591.45L807.24,590.41L808.48,585.82L804.98,587.34L799.95,582.54L799.57,578.71L805.23,570.34L801.47,557.59L806.25,550.44L804.19,543.88L806.55,541.31L814.80,539.08L812.37,536.85L806.65,537.03L799.94,531.90L798.40,528.02L793.09,524.57L789.01,518.59L789.18,502.96L787.88,502.75L786.64,486.61L789.64,486.57L800.32,481.21L810.31,481.08L815.99,475.42L822.06,483.68L827.11,479.30L835.10,477.56L834.35,475.01L837.53,474.95L838.22,466.20L845.27,468.62L850.86,467.81L857.56,464.77L863.80,457.37L868.93,457.30L867.44,447.12L868.48,432.70L871.07,431.72L882.97,434.68L876.75,422.78L870.39,419.37L858.22,407.12L855.38,406.07L859.60,405.04L865.21,397.69L868.47,397.90L866.78,393.53L860.30,392.55L848.31,380.78L836.46,379.73L830.52,382.68L824.62,383.55L825.86,368.99L818.50,368.07L811.75,358.45L805.75,356.88L802.30,352.57L798.83,352.15L794.51,354.76L791.93,354.56L786.69,350.19L783.00,343.25L774.02,348.69L768.94,346.89L761.92,349.08L760.60,341.03L763.09,338.82L763.29,336.06L753.33,332.81L747.28,327.88L745.43,324.35L740.80,321.91L742.35,319.29L739.54,316.49L746.40,295.62L745.92,290.77L736.81,290.92L735.78,294.20L732.16,293.78L729.93,296.31L728.03,294.11L727.41,289.29L723.93,287.08L726.10,282.82L724.08,281.47L718.57,288.48L704.15,290.07L698.08,286.14L695.40,278.19L690.07,272.40L689.19,266.41L680.20,264.65L673.24,256.35L672.19,251.61L667.66,249.65L664.95,244.06L659.35,247.36L653.78,255.12L648.31,253.05L644.09,253.32L636.54,244.61L637.68,238.74L632.24,243.32L623.24,240.67L631.02,228.76L635.20,225.25L630.81,221.73L630.72,214.98L619.29,214.86L614.67,210.94L607.34,210.82L598.42,218.62L594.20,220.16L592.34,219.89L592.09,218.21L590.34,219.26L591.95,221.06L588.58,224.15L579.29,222.82L578.12,219.41L575.29,222.14L570.58,221.97L566.82,223.92L562.26,221.78L564.56,219.55L562.69,218.57L564.30,218.22L564.01,216.84L567.44,213.52L573.99,211.76L580.73,213.51L581.75,215.24L583.72,213.25L584.77,215.11L583.41,206.72L580.73,205.10L574.31,205.31L572.25,206.15L570.60,209.81L565.76,206.32L559.98,208.33L539.77,209.28L527.72,205.66L522.31,198.11L520.59,198.89L520.97,197.40L509.07,199.53L508.80,201.65L506.79,201.69L500.72,208.50L501.02,210.44L499.22,210.84L501.28,214.06L503.27,213.89L505.40,217.93L503.49,223.14L498.25,229.54L475.55,243.15L444.14,252.03L431.07,268.19L430.68,271.19L434.10,274.54L435.39,278.40L432.05,286.66L418.32,296.96L401.18,304.37L402.56,309.92L398.50,315.96L399.87,320.98L396.35,327.99L398.79,331.40L397.67,342.30L393.27,358.72L385.79,367.97L373.08,378.95L372.43,381.33L362.95,388.46L357.43,399.96L355.51,418.17L337.52,432.66L328.93,437.73L327.48,447.19L320.74,456.05L283.73,470.79L297.80,519.18L282.37,536.59L284.46,540.26L290.46,541.04L306.92,554.60L318.68,590.13L329.92,584.84L346.73,588.79L354.42,595.66L355.02,602.39L360.58,607.31L363.05,622.76L366.50,626.13L376.04,625.68L376.16,628.20L370.43,634.36L370.34,639.25L378.36,653.77L380.60,661.34L381.57,693.07L391.81,710.30L391.34,714.11L389.74,715.43L362.00,729.57L337.77,751.80L336.29,763.17L328.54,770.80L322.88,796.06L320.80,802.31L318.04,804.61L318.46,814.81L316.86,820.78L306.92,827.11L301.41,840.12L298.00,856.30L295.24,860.25L286.26,865.62L282.56,871.40L277.24,894.20L277.26,897.56L283.23,907.68L280.75,949.70L272.27,957.05L264.96,970.33L261.43,971.78L258.23,976.01L256.73,981.67L252.71,988.18L253.52,995.10L250.25,1014.15L250.90,1020.81L249.40,1024.68L244.18,1027.80L243.82,1031.98L247.44,1042.52L247.18,1072.16L239.66,1087.42L237.14,1109.05L242.86,1124.91L249.57,1133.71L259.49,1141.89L264.14,1150.00L591.68,1150.00L587.80,1143.30L595.73,1135.25L593.79,1122.62L594.84,1118.16L598.93,1113.93L599.14,1101.57L600.44,1098.67L608.87,1095.80L623.37,1110.04L631.45,1110.74L637.13,1108.66L641.62,1102.55L661.35,1110.88L676.06,1109.93L675.86,1101.17L685.62,1098.00L690.19,1092.20L691.66,1088.39L691.06,1081.45L695.71,1074.33L698.03,1055.23L700.73,1051.92L705.07,1050.17L727.11,1044.32L729.58,1040.38L734.50,1031.92L734.50,1023.73L743.20,1010.57L745.23,992.44L747.83,987.18L761.16,983.96L765.48,986.40L768.25,981.00L775.07,974.60L781.16,970.21L793.87,966.18L797.85,962.80L803.06,950.06L804.92,930.42L814.54,932.62L824.33,923.48L827.60,917.40L831.57,915.21L834.25,909.56L841.31,907.27L848.59,898.53L851.81,892.14L852.63,886.19L859.10,876.58L865.77,875.12L874.75,880.68L878.81,881.56L887.21,881.85L892.49,878.95L910.91,880.27L922.30,878.23L932.69,880.64L945.42,880.49L964.57,870.44L978.48,861.07L983.12,859.90L991.23,866.93L1000.83,869.54L1004.31,866.65L1009.97,856.57L1015.91,852.25L1015.91,682.64Z"}, {"name": "Chocó", "d": "M9.76,781.40L0.09,782.80L0.09,1150.00L88.49,1150.00L83.59,1146.84L84.42,1143.16L82.59,1139.61L62.08,1126.07L27.33,1094.75L6.29,1085.68L4.26,1079.87L0.09,1074.20L0.09,903.45L2.82,894.38L5.87,890.81L14.27,890.28L22.05,885.42L25.28,873.21L20.34,867.76L17.40,869.53L16.18,859.54L9.93,857.44L6.72,854.29L11.11,841.24L15.47,841.05L19.11,848.78L21.67,847.27L24.23,822.55L16.22,811.63L10.47,793.46L9.76,781.40Z"}];
+  var NEIGHBOR_PATH = "M1015.91,0.00L1015.91,1150.00L0.09,1150.00L0.09,779.47L31.74,833.75L52.63,843.08L71.79,861.74L63.08,875.31L42.19,889.73L36.96,919.41L50.89,935.52L64.82,945.69L103.14,938.91L124.03,904.99L110.10,753.99L87.46,678.44L61.34,655.52L38.70,625.80L54.38,602.87L96.17,592.67L150.15,566.34L350.42,421.87L418.34,286.63L470.58,237.28L529.79,205.78L601.19,213.44L658.65,196.42L676.07,153.00L660.40,94.23L637.76,59.30L660.79,0.00L1015.91,0.00Z";
+
+  var seen = new Array(TOWNS.length).fill(false);
+  var read = new Array(TOWNS.length).fill(false);
+  var readCount = 0;
+  var strokes = []; // accumulated brush points, in logical coords — replayed on resize
+
+  var stage = document.getElementById('stage');
+  var visible = document.getElementById('mapCanvas');
+  var vCtx = visible.getContext('2d');
+  var fullMap = document.createElement('canvas');
+  var fmCtx = fullMap.getContext('2d');
+  var mask = document.createElement('canvas');
+  var mCtx = mask.getContext('2d');
+  var temp = document.createElement('canvas');
+  var tCtx = temp.getContext('2d');
+
+  var hotspots = document.getElementById('hotspots');
+  var brushRing = document.getElementById('brushRing');
+  var hintPulse = document.getElementById('hintPulse');
+  var instruction = document.getElementById('instruction');
+  var countEl = document.getElementById('count');
+  var panelEmpty = document.getElementById('panelEmpty');
+  var panelList = document.getElementById('panelList');
+  var closing = document.getElementById('closing');
+  var routePath = document.getElementById('route-path');
+
+  var isCoarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  if (isCoarse) instruction.textContent = 'Desliza el dedo sobre la oscuridad para revelar el mapa';
+
+  function hashLightness(name){
+    var h = 0;
+    for (var i=0;i<name.length;i++) h = (h*31 + name.charCodeAt(i)) >>> 0;
+    return (h % 7) - 3;
+  }
+
+  var deptPath2D = DEPTS.map(function(d){ return { path: new Path2D(d.d), name: d.name }; });
+  var neighborPath2D = new Path2D(NEIGHBOR_PATH);
+
+  var currentScale = 1;
+
+  function resetTransform(ctx){ ctx.setTransform(1,0,0,1,0,0); }
+
+  function drawFullMap(){
+    resetTransform(fmCtx);
+    fmCtx.clearRect(0, 0, fullMap.width, fullMap.height);
+    fmCtx.setTransform(currentScale, 0, 0, currentScale, 0, 0);
+
+    fmCtx.fillStyle = '#14171b';
+    fmCtx.strokeStyle = '#282c34';
+    fmCtx.lineWidth = 1;
+    fmCtx.fill(neighborPath2D);
+    fmCtx.stroke(neighborPath2D);
+
+    deptPath2D.forEach(function(d){
+      var L = 22 + hashLightness(d.name);
+      fmCtx.fillStyle = 'hsl(220,12%,' + L + '%)';
+      fmCtx.strokeStyle = '#5b6373';
+      fmCtx.lineWidth = 1.4;
+      fmCtx.fill(d.path);
+      fmCtx.stroke(d.path);
+    });
+
+    TOWNS.forEach(function(t){
+      fmCtx.beginPath();
+      fmCtx.arc(t.x, t.y, 13, 0, Math.PI*2);
+      fmCtx.strokeStyle = 'rgba(201,143,143,0.55)';
+      fmCtx.lineWidth = 1;
+      fmCtx.stroke();
+
+      fmCtx.beginPath();
+      fmCtx.arc(t.x, t.y, 6, 0, Math.PI*2);
+      fmCtx.fillStyle = '#c98f8f';
+      fmCtx.fill();
+
+      fmCtx.font = 'italic 17px Newsreader, Georgia, serif';
+      fmCtx.fillStyle = '#eae6df';
+      fmCtx.fillText(t.name, t.x + 11, t.y + 5);
+    });
+  }
+
+  function paintStroke(x, y){
+    mCtx.setTransform(currentScale, 0, 0, currentScale, 0, 0);
+    mCtx.globalCompositeOperation = 'lighten';
+    var grad = mCtx.createRadialGradient(x, y, 0, x, y, BRUSH_R);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.65, 'rgba(255,255,255,0.85)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    mCtx.fillStyle = grad;
+    mCtx.beginPath();
+    mCtx.arc(x, y, BRUSH_R, 0, Math.PI*2);
+    mCtx.fill();
+  }
+
+  function replayMask(){
+    resetTransform(mCtx);
+    mCtx.clearRect(0, 0, mask.width, mask.height);
+    strokes.forEach(function(p){ paintStroke(p[0], p[1]); });
+  }
+
+  function composite(){
+    resetTransform(tCtx);
+    tCtx.clearRect(0, 0, temp.width, temp.height);
+    tCtx.globalCompositeOperation = 'source-over';
+    tCtx.drawImage(fullMap, 0, 0);
+    tCtx.globalCompositeOperation = 'destination-in';
+    tCtx.drawImage(mask, 0, 0);
+    tCtx.globalCompositeOperation = 'source-over';
+
+    resetTransform(vCtx);
+    vCtx.fillStyle = '#0a0a0c';
+    vCtx.fillRect(0, 0, visible.width, visible.height);
+    vCtx.drawImage(temp, 0, 0);
+  }
+
+  function sizeCanvases(){
+    var rect = stage.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    var wPx = Math.max(1, Math.round(rect.width * dpr));
+    var hPx = Math.max(1, Math.round(rect.height * dpr));
+    [visible, fullMap, mask, temp].forEach(function(c){ c.width = wPx; c.height = hPx; });
+    currentScale = wPx / VB_W;
+    drawFullMap();
+    replayMask();
+    composite();
+  }
+
+  // --- Hotspots ---
+  TOWNS.forEach(function(t, i){
+    var hs = document.createElement('button');
+    hs.className = 'hotspot';
+    hs.style.left = (t.x / VB_W * 100) + '%';
+    hs.style.top = (t.y / VB_H * 100) + '%';
+    hs.setAttribute('aria-label', 'Punto cerca de ' + t.name);
+    hs.addEventListener('click', function(){ revealAndRead(i); });
+    hs.addEventListener('focus', function(){ revealAndRead(i); });
+    hotspots.appendChild(hs);
+    t._el = hs;
+  });
+
+  function markSeen(i){
+    if (seen[i]) return;
+    seen[i] = true;
+    TOWNS[i]._el.classList.add('seen');
+  }
+
+  function updateRoute(){
+    var pts = [];
+    TOWNS.forEach(function(t,i){ if (read[i]) pts.push(t.x + ',' + t.y); });
+    routePath.setAttribute('d', pts.length > 1 ? 'M' + pts.join('L') : '');
+  }
+
+  function addClueCard(i){
+    var t = TOWNS[i];
+    if (panelList.children.length === 0) panelEmpty.style.display = 'none';
+    var card = document.createElement('div');
+    card.className = 'clue-card';
+    card.innerHTML =
+      '<div class="tag"><span class="n">' + (readCount) + '.</span>' + t.name + '</div>' +
+      '<div class="witness">' + t.witness + '</div>' +
+      '<p>' + t.text + '</p>';
+    panelList.appendChild(card);
+    panelList.scrollTop = panelList.scrollHeight;
+  }
+
+  function revealAndRead(i){
+    if (!seen[i]){
+      markSeen(i);
+      strokes.push([TOWNS[i].x, TOWNS[i].y]);
+      paintStroke(TOWNS[i].x, TOWNS[i].y);
+      composite();
+    }
+    if (read[i]) return;
+    read[i] = true;
+    readCount++;
+    TOWNS[i]._el.classList.add('read');
+    addClueCard(i);
+    updateRoute();
+    countEl.textContent = readCount;
+    if (readCount === TOWNS.length) closing.classList.add('show');
+  }
+
+  function checkNear(lx, ly){
+    TOWNS.forEach(function(t, i){
+      if (seen[i]) return;
+      if (Math.hypot(lx - t.x, ly - t.y) < NEAR_R) markSeen(i);
+    });
+  }
+
+  var moved = false;
+  function paintAt(clientX, clientY){
+    var rect = stage.getBoundingClientRect();
+    var cx = clientX - rect.left, cy = clientY - rect.top;
+    if (cx < 0 || cy < 0 || cx > rect.width || cy > rect.height) return;
+    if (!moved){ moved = true; stage.classList.add('touched'); }
+
+    var lx = cx * (VB_W / rect.width);
+    var ly = cy * (VB_H / rect.height);
+
+    strokes.push([lx, ly]);
+    paintStroke(lx, ly);
+    composite();
+
+    brushRing.style.width = brushRing.style.height = (BRUSH_R * 2 * rect.width / VB_W) + 'px';
+    brushRing.style.left = (cx - BRUSH_R * rect.width / VB_W) + 'px';
+    brushRing.style.top = (cy - BRUSH_R * rect.width / VB_W) + 'px';
+
+    instruction.classList.add('hidden-hint');
+    checkNear(lx, ly);
+  }
+
+  stage.addEventListener('pointermove', function(e){ paintAt(e.clientX, e.clientY); });
+  stage.addEventListener('pointerdown', function(e){ paintAt(e.clientX, e.clientY); });
+  stage.addEventListener('pointerleave', function(){
+    brushRing.style.left = '-400px'; brushRing.style.top = '-400px';
+  });
+
+  var resizeTimer;
+  window.addEventListener('resize', function(){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(sizeCanvases, 120);
+  });
+
+  sizeCanvases();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Síntomas del viaje</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,600&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#090c13;
+    --ink:#eef1f7;
+    --muted:#8f97ab;
+    --blue:#3b7cf0;
+    --warm:#ffb37a;
+    --chip:rgba(255,255,255,.08);
+    --serif:'Newsreader',Georgia,'Times New Roman',serif;
+    --sans:'Instrument Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:980px;margin:0 auto;padding:40px 20px 56px;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(24px,4vw,38px);line-height:1.15;margin:0 0 8px;letter-spacing:-.01em}
+  .sub{margin:0;color:var(--muted);max-width:64ch;line-height:1.55;font-size:15px}
+  .hint{color:var(--muted);font-size:14px;margin:20px 0 10px;min-height:1.5em;line-height:1.5;max-width:72ch}
+
+  .layout{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap}
+  .chartcol{flex:1 1 440px;min-width:0}
+  .sidecol{flex:0 0 240px;min-width:200px}
+
+  .legend{display:flex;align-items:center;gap:18px;font-size:12.5px;color:var(--muted);margin-bottom:6px;flex-wrap:wrap}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .legend i.before{background:var(--blue)}
+  .legend i.after{background:var(--warm)}
+
+  .stage{position:relative;width:100%;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+  .stage svg{display:block;width:100%;height:auto;overflow:visible}
+
+  .gridline{stroke:rgba(255,255,255,.09);stroke-width:1}
+  .axisline{stroke:rgba(255,255,255,.22);stroke-width:1.2}
+  .ylabel{fill:var(--muted);font-size:11.5px;font-family:var(--sans)}
+  .catlabel{fill:var(--muted);font-size:12.5px;font-family:var(--sans);text-anchor:middle;transition:fill .15s ease}
+  .catgroup.active .catlabel{fill:var(--ink)}
+  .catgroup{cursor:pointer}
+  .hitrect{fill:transparent}
+  .vallabel{fill:var(--ink);font-family:var(--sans);font-weight:600;font-size:13px;text-anchor:middle}
+
+  .bar-before{fill:var(--blue)}
+  .bar-after{fill:var(--warm)}
+  .bar{transition:opacity .15s ease}
+  .ghost{fill:var(--warm);opacity:0}
+
+  .panel{background:var(--chip);border-radius:14px;padding:16px 18px;min-height:150px}
+  .panel .ph{color:var(--muted);font-size:13.5px;line-height:1.5}
+  .panel .name{font-family:var(--serif);font-weight:600;font-size:clamp(19px,2.4vw,23px);line-height:1.2;letter-spacing:-.01em;display:none}
+  .panel .counts{color:var(--muted);font-size:13px;margin-top:8px;display:none}
+  .panel .counts b{color:var(--ink);font-weight:600}
+  .panel .desc{color:var(--ink);font-family:var(--serif);font-size:15px;line-height:1.5;margin-top:10px;display:none;font-style:italic}
+  .panel.active .ph{display:none}
+  .panel.active .name,.panel.active .counts,.panel.active .desc,.panel.active .readout{display:block}
+
+  .readout{display:none;margin-top:14px;padding-top:12px;border-top:1px dashed rgba(255,255,255,.2)}
+  .readout-title{margin:0 0 8px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-family:var(--sans);font-weight:600}
+  .rline{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+  .rline:last-child{border-bottom:none}
+  .rlabel{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;flex:0 0 auto}
+  .rval{color:var(--ink);font-family:var(--serif);font-style:italic;font-size:13px;line-height:1.35;text-align:right}
+
+  /* ---------- Glitches por síntoma ---------- */
+
+  /* Lapsos de memoria: fotogramas que faltan */
+  @keyframes memGap{
+    0%,8%,100%{opacity:1}
+    10%,17%{opacity:.12}
+    46%,53%{opacity:.12}
+    19%,45%,55%{opacity:1}
+  }
+  .catgroup.active[data-effect="memoria"] .bar{animation:memGap 1.8s steps(1,end) infinite}
+
+  /* Dolores de cabeza: pulso */
+  @keyframes throb{
+    0%,100%{transform:scaleY(1)}
+    22%{transform:scaleY(1.055)}
+    38%{transform:scaleY(.975)}
+    58%{transform:scaleY(1.07)}
+    80%{transform:scaleY(1)}
+  }
+  .catgroup.active[data-effect="dolor"] .bar{animation:throb 1.05s ease-in-out infinite;transform-box:fill-box;transform-origin:bottom}
+
+  /* Déjà vu: un eco fantasma que se repite */
+  @keyframes ghostEcho{
+    0%,100%{opacity:0;transform:translate(0,0)}
+    14%{opacity:.55;transform:translate(8px,-6px)}
+    30%{opacity:0;transform:translate(0,0)}
+    56%{opacity:.4;transform:translate(-7px,-5px)}
+    72%{opacity:0;transform:translate(0,0)}
+  }
+  .catgroup.active[data-effect="dejavu"] .ghost{animation:ghostEcho 2.3s ease-in-out infinite;transform-box:fill-box}
+
+  /* Sueños vívidos del pasado: desenfoque onírico */
+  @keyframes dreamy{
+    0%,100%{filter:blur(0) saturate(1)}
+    50%{filter:blur(2.6px) saturate(1.5)}
+  }
+  .catgroup.active[data-effect="suenos"] .bar{animation:dreamy 2.6s ease-in-out infinite}
+
+  /* Desorientación momentánea: todo el gráfico se ladea y vuelve a enfocar */
+  #plotRoot{transition:transform .6s cubic-bezier(.34,1.56,.64,1),filter .5s ease;transform-origin:337px 178px}
+  #plotRoot.disoriented{transform:rotate(-2.4deg);filter:blur(.6px)}
+
+  @media (prefers-reduced-motion: reduce){
+    .catgroup.active .bar,.catgroup.active .ghost{animation:none!important}
+    .catgroup.active[data-effect="dolor"] .bar,
+    .catgroup.active[data-effect="suenos"] .bar{filter:none!important;transform:none!important}
+    #plotRoot{transition:none!important}
+    #plotRoot.disoriented{transform:none!important;filter:none!important}
+  }
+
+  path.dept,.hitrect,.catgroup{outline:none;-webkit-tap-highlight-color:transparent}
+  .hitrect:focus,.hitrect:focus-visible{outline:none}
+
+  @media (max-width:720px){
+    .layout{flex-direction:column}
+    .sidecol{flex-basis:auto;width:100%}
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>Síntomas del protagonista antes y después de viajar al pasado</h1>
+  <p class="sub">Episodios semanales reportados tras el viaje en el tiempo a través de la fotografía.</p>
+
+  <p class="hint" id="hint"></p>
+
+  <div class="layout">
+    <div class="chartcol">
+      <div class="legend"><span><i class="before"></i>Antes del viaje</span><span><i class="after"></i>Después del viaje</span></div>
+      <div class="stage" id="stage">
+        <svg id="svg" viewBox="0 0 640 380" role="img" aria-label="Gráfico de barras: episodios semanales de cinco síntomas del protagonista, antes y después de viajar al pasado"></svg>
+      </div>
+    </div>
+    <div class="sidecol">
+      <div class="panel" id="panel">
+        <p class="ph" id="ph"></p>
+        <span class="name" id="pname"></span>
+        <div class="counts" id="pcounts"></div>
+        <p class="desc" id="pdesc"></p>
+        <div class="readout" id="preadout">
+          <p class="readout-title">Ficha del síntoma</p>
+          <div class="rline"><span class="rlabel">Frecuencia</span><span class="rval" id="rfreq"></span></div>
+          <div class="rline"><span class="rlabel">Duración</span><span class="rval" id="rdur"></span></div>
+          <div class="rline"><span class="rlabel">Detonante</span><span class="rval" id="rtrig"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  const NS = 'http://www.w3.org/2000/svg';
+  const $ = id => document.getElementById(id);
+  const svg = $('svg'), panel = $('panel'), phEl = $('ph'), nameEl = $('pname'), countsEl = $('pcounts'), descEl = $('pdesc');
+  const freqEl = $('rfreq'), durEl = $('rdur'), trigEl = $('rtrig');
+
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
+
+  const CATS = [
+    { key: 'memoria', lines: ['Lapsos de', 'memoria'], antes: 0, despues: 2, effect: 'memoria',
+      desc: 'Fragmentos que se pierden entre un instante y el siguiente.',
+      freq: '2 de cada 3 viajes', dur: 'Algunos segundos', trigger: 'Mirar el mismo rollo demasiado tiempo' },
+    { key: 'dolor', lines: ['Dolores de', 'cabeza'], antes: 1, despues: 2, effect: 'dolor',
+      desc: 'Un pulso que no estaba antes de tocar la fotografía.',
+      freq: 'Casi todos los viajes', dur: 'Minutos, a veces hasta el día siguiente', trigger: 'El instante exacto del salto' },
+    { key: 'dejavu', lines: ['Déjà vu'], antes: 0, despues: 3, effect: 'dejavu',
+      desc: 'Ver dos veces lo que solo pasó una.',
+      freq: 'Varias veces por semana', dur: 'Un parpadeo', trigger: 'Pisar un lugar que ya vivió en el pasado' },
+    { key: 'suenos', lines: ['Sueños vívidos', 'del pasado'], antes: 0, despues: 3, effect: 'suenos',
+      desc: 'El pasado se cuela incluso dormido.',
+      freq: 'Casi todas las noches', dur: 'Toda la noche', trigger: 'Dormir cerca de los rollos revelados' },
+    { key: 'desorientacion', lines: ['Desorientación', 'momentánea'], antes: 0, despues: 1, effect: 'desorientacion',
+      desc: 'El presente tarda un segundo de más en volver.',
+      freq: 'Ocasional', dur: 'Unos segundos', trigger: 'El regreso brusco al presente' }
+  ];
+
+  function el(tag, attrs) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  // ---------- Geometría del gráfico ----------
+  const VB_W = 640, VB_H = 380;
+  const PLOT_L = 54, PLOT_R = 620, PLOT_TOP = 56, PLOT_BOTTOM = 300;
+  const PLOT_W = PLOT_R - PLOT_L, PLOT_H = PLOT_BOTTOM - PLOT_TOP;
+  const Y_MAX = 3.6, Y_TICKS = [0, 1, 2, 3];
+  const pxPerUnit = PLOT_H / Y_MAX;
+  const yOf = v => PLOT_BOTTOM - v * pxPerUnit;
+
+  const slotW = PLOT_W / CATS.length;
+  const BAR_W = 30, BAR_GAP = 8;
+
+  let groupEls = [];
+  let activeKey = null;
+  let plotRoot = null;
+
+  function build() {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    // gridlines + eje y
+    const gGrid = el('g', { id: 'grid' });
+    Y_TICKS.forEach(v => {
+      const y = yOf(v);
+      gGrid.appendChild(el('line', { class: 'gridline', x1: PLOT_L, x2: PLOT_R, y1: y, y2: y }));
+      const lbl = el('text', { class: 'ylabel', x: PLOT_L - 10, y: y + 4, 'text-anchor': 'end' });
+      lbl.textContent = String(v);
+      gGrid.appendChild(lbl);
+    });
+    gGrid.appendChild(el('line', { class: 'axisline', x1: PLOT_L, x2: PLOT_R, y1: PLOT_BOTTOM, y2: PLOT_BOTTOM }));
+    svg.appendChild(gGrid);
+
+    plotRoot = el('g', { id: 'plotRoot' });
+
+    CATS.forEach((cat, i) => {
+      const slotCx = PLOT_L + slotW * i + slotW / 2;
+      const groupW = BAR_W * 2 + BAR_GAP;
+      const xBefore = slotCx - groupW / 2;
+      const xAfter = xBefore + BAR_W + BAR_GAP;
+
+      const g = el('g', { class: 'catgroup', 'data-effect': cat.effect });
+
+      // zona de interacción: toda la columna, del techo del área de trazado a debajo de la etiqueta
+      const hit = el('rect', {
+        class: 'hitrect', x: PLOT_L + slotW * i, y: PLOT_TOP - 10, width: slotW, height: PLOT_H + 55,
+        tabindex: '0', role: 'button',
+        'aria-label': cat.lines.join(' ') + ': ' + cat.antes + ' episodios antes del viaje, ' + cat.despues + ' episodios después del viaje'
+      });
+      g.appendChild(hit);
+
+      if (cat.antes > 0) {
+        const h = cat.antes * pxPerUnit;
+        g.appendChild(el('rect', { class: 'bar bar-before', x: xBefore, y: yOf(cat.antes), width: BAR_W, height: h, rx: 3 }));
+        const lbl = el('text', { class: 'vallabel', x: xBefore + BAR_W / 2, y: yOf(cat.antes) - 8 });
+        lbl.textContent = String(cat.antes);
+        g.appendChild(lbl);
+      }
+      if (cat.despues > 0) {
+        const h = cat.despues * pxPerUnit;
+        g.appendChild(el('rect', { class: 'bar bar-after', x: xAfter, y: yOf(cat.despues), width: BAR_W, height: h, rx: 3 }));
+        const lbl = el('text', { class: 'vallabel', x: xAfter + BAR_W / 2, y: yOf(cat.despues) - 8 });
+        lbl.textContent = String(cat.despues);
+        g.appendChild(lbl);
+        // fantasma para el eco de déjà vu (clon invisible salvo cuando ese síntoma está activo)
+        g.appendChild(el('rect', { class: 'ghost', x: xAfter, y: yOf(cat.despues), width: BAR_W, height: h, rx: 3 }));
+      }
+
+      const labelYStart = PLOT_BOTTOM + 22;
+      cat.lines.forEach((line, li) => {
+        const t = el('text', { class: 'catlabel', x: slotCx, y: labelYStart + li * 15 });
+        t.textContent = line;
+        g.appendChild(t);
+      });
+
+      plotRoot.appendChild(g);
+      groupEls.push({ g, hit, cat });
+    });
+
+    svg.appendChild(plotRoot);
+  }
+
+  function showCat(key) {
+    const entry = groupEls.find(e => e.cat.key === key);
+    if (!entry) return;
+    activeKey = key;
+    groupEls.forEach(e => e.g.classList.toggle('active', e.cat.key === key));
+    plotRoot.classList.toggle('disoriented', entry.cat.effect === 'desorientacion');
+
+    panel.classList.add('active');
+    nameEl.textContent = entry.cat.lines.join(' ');
+    countsEl.innerHTML = 'Antes: <b>' + entry.cat.antes + '</b> · Después: <b>' + entry.cat.despues + '</b>';
+    descEl.textContent = entry.cat.desc;
+    freqEl.textContent = entry.cat.freq;
+    durEl.textContent = entry.cat.dur;
+    trigEl.textContent = entry.cat.trigger;
+  }
+
+  function clearCat() {
+    activeKey = null;
+    groupEls.forEach(e => e.g.classList.remove('active'));
+    plotRoot.classList.remove('disoriented');
+    panel.classList.remove('active');
+  }
+
+  function attachEvents() {
+    if (coarse) {
+      svg.addEventListener('click', e => {
+        const hit = e.target.closest('.hitrect');
+        if (!hit) { clearCat(); return; }
+        const entry = groupEls.find(x => x.hit === hit);
+        if (!entry) return;
+        if (entry.cat.key === activeKey) clearCat(); else showCat(entry.cat.key);
+      });
+    } else {
+      groupEls.forEach(e => {
+        e.hit.addEventListener('pointerenter', () => showCat(e.cat.key));
+        e.hit.addEventListener('focus', () => showCat(e.cat.key));
+      });
+      svg.addEventListener('pointerleave', clearCat);
+      svg.addEventListener('focusout', ev => {
+        if (!svg.contains(ev.relatedTarget)) clearCat();
+      });
+    }
+    svg.addEventListener('keydown', e => {
+      if ((e.key === 'Enter' || e.key === ' ') && document.activeElement.classList.contains('hitrect')) {
+        e.preventDefault();
+        const entry = groupEls.find(x => x.hit === document.activeElement);
+        if (!entry) return;
+        if (coarse || entry.cat.key !== activeKey) showCat(entry.cat.key); else clearCat();
+      }
+      if (e.key === 'Escape') clearCat();
+    });
+  }
+
+  phEl.textContent = coarse
+    ? 'Toca un síntoma para sentir cómo se manifiesta.'
+    : 'Pasa el cursor por un síntoma para sentir cómo se manifiesta.';
+
+  build();
+  attachEvents();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fuga de memoria</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,600&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#090c13;
+    --ink:#eef1f7;
+    --muted:#8f97ab;
+    --blue:#3b7cf0;
+    --warm:#ffb37a;
+    --chip:rgba(255,255,255,.08);
+    --serif:'Newsreader',Georgia,'Times New Roman',serif;
+    --sans:'Instrument Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:980px;margin:0 auto;padding:40px 20px 56px;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(24px,4vw,38px);line-height:1.15;margin:0 0 8px;letter-spacing:-.01em}
+  .sub{margin:0;color:var(--muted);max-width:64ch;line-height:1.55;font-size:15px}
+  .hint{color:var(--muted);font-size:14px;margin:20px 0 10px;min-height:1.5em;line-height:1.5;max-width:72ch}
+
+  .layout{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap}
+  .chartcol{flex:1 1 440px;min-width:0}
+  .sidecol{flex:0 0 250px;min-width:210px}
+
+  .legend{display:flex;align-items:center;gap:18px;font-size:12.5px;color:var(--muted);margin-bottom:6px;flex-wrap:wrap}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:16px;height:3px;border-radius:2px;display:inline-block}
+  .legend i.vivido{background:var(--warm)}
+  .legend i.recordado{background:var(--blue)}
+
+  .stage{position:relative;width:100%;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+  .stage svg{display:block;width:100%;height:auto;overflow:visible}
+
+  .gridline{stroke:rgba(255,255,255,.09);stroke-width:1}
+  .axisline{stroke:rgba(255,255,255,.22);stroke-width:1.2}
+  .ylabel{fill:var(--muted);font-size:11.5px;font-family:var(--sans)}
+  .catlabel{fill:var(--muted);font-size:12.5px;font-family:var(--sans);text-anchor:middle;transition:fill .15s ease}
+  .catcol.active .catlabel{fill:var(--ink)}
+  .catcol{cursor:pointer}
+  .hitrect{fill:transparent;cursor:pointer}
+  /* solo el hitrect debe recibir el mouse: las líneas, puntos, textos y la fuga son puramente visuales
+     (un texto con opacity:0 igual intercepta el pointer si no se le apaga explícitamente) */
+  .catcol>*:not(.hitrect){pointer-events:none}
+
+  .lineviv{fill:none;stroke:var(--warm);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+
+  /* "lo recordado" no existe todavía, ni siquiera insinuado: no hay nada que dibujar hasta que
+     una gota realmente caiga y "aterrice" ahí. Cada tramo aparece solo cuando sus dos extremos
+     fueron recordados. */
+  .linerec-seg{fill:none;stroke:var(--blue);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;opacity:0;transition:opacity .5s ease}
+  .linerec-seg.visited{opacity:1}
+
+  .pt{transform-box:fill-box;transform-origin:center}
+  .pt-viv{fill:var(--warm);transition:opacity .2s ease}
+  .pt-rec{fill:var(--blue);opacity:0;transform:scale(.25);transition:opacity .35s ease,transform .4s cubic-bezier(.34,1.56,.64,1)}
+  .pt-rec.visited{opacity:1;transform:scale(1)}
+  #plotRoot.anyActive .catcol:not(.active) .pt-viv{opacity:.3}
+  .catcol.active .pt-viv{transform:scale(1.5);transition:transform .25s cubic-bezier(.34,1.56,.64,1)}
+  .catcol.active .pt-rec.visited{transform:scale(1.5)}
+
+  .vallabel{font-family:var(--sans);font-weight:600;font-size:12px;text-anchor:middle;opacity:0;transition:opacity .2s ease}
+  .catcol.active .vallabel{opacity:1}
+  .vallabel-viv{fill:var(--warm)}
+  .vallabel-rec{fill:var(--blue)}
+
+  /* ---------- La fuga: goteo entre lo vivido y lo recordado ---------- */
+  .leak-line{stroke:url(#leakGrad);stroke-width:1.6;stroke-dasharray:2 4;opacity:0;transition:opacity .3s ease}
+  .catcol.active .leak-line{opacity:.9}
+  .leak-fill{fill:url(#leakGrad);opacity:0;transform:scaleY(0);transform-box:fill-box;transform-origin:top;transition:transform .55s cubic-bezier(.22,.9,.3,1),opacity .3s ease}
+  .catcol.active .leak-fill{opacity:.16;transform:scaleY(1)}
+
+  .drop{opacity:0}
+  /* la gota nace naranja (lo vivido) y se enfría a azul (lo recordado) mientras cae */
+  @keyframes drip{
+    0%{transform:translateY(0);opacity:0;fill:var(--warm)}
+    10%{opacity:.95}
+    55%{fill:var(--warm)}
+    78%{opacity:.55}
+    100%{transform:translateY(var(--dripDist,120px));opacity:0;fill:var(--blue)}
+  }
+  .catcol.active .drop{animation:drip 1.7s linear infinite}
+
+  .panel{background:var(--chip);border-radius:14px;padding:16px 18px;min-height:150px}
+  .panel .ph{color:var(--muted);font-size:13.5px;line-height:1.5}
+  .panel .name{font-family:var(--serif);font-weight:600;font-size:clamp(19px,2.4vw,23px);line-height:1.2;letter-spacing:-.01em;display:none}
+  .panel .counts{color:var(--muted);font-size:13px;margin-top:8px;display:none}
+  .panel .counts b{color:var(--ink);font-weight:600}
+  .panel .desc{color:var(--ink);font-family:var(--serif);font-size:15px;line-height:1.5;margin-top:10px;display:none;font-style:italic}
+  .panel.active .ph{display:none}
+  .panel.active .name,.panel.active .counts,.panel.active .desc,.panel.active .readout{display:block}
+
+  .readout{display:none;margin-top:14px;padding-top:12px;border-top:1px dashed rgba(255,255,255,.2)}
+  .readout-title{margin:0 0 8px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-family:var(--sans);font-weight:600}
+  .rline{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+  .rline:last-child{border-bottom:none}
+  .rlabel{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;flex:0 0 auto}
+  .rval{color:var(--ink);font-family:var(--serif);font-style:italic;font-size:13px;line-height:1.35;text-align:right}
+  .rval.big{font-size:17px;font-weight:600;font-style:normal;color:var(--warm)}
+
+  @media (prefers-reduced-motion: reduce){
+    .drop{animation:none!important;opacity:0!important}
+    .leak-fill{transition:none!important}
+    .pt{transition:none!important}
+  }
+
+  path.dept,.hitrect,.catcol{outline:none;-webkit-tap-highlight-color:transparent}
+  .hitrect:focus,.hitrect:focus-visible{outline:none}
+
+  @media (max-width:720px){
+    .layout{flex-direction:column}
+    .sidecol{flex-basis:auto;width:100%}
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>Intensidad de las sensaciones: recordada vs vivida</h1>
+  <p class="sub">Lo que sintió el protagonista al viajar al pasado, comparado con lo que hoy recuerda de eso mismo.</p>
+
+  <p class="hint" id="hint"></p>
+
+  <div class="layout">
+    <div class="chartcol">
+      <div class="legend"><span><i class="vivido"></i>Lo que sintió al viajar (pasado)</span><span><i class="recordado"></i>Lo que recuerda (presente)</span></div>
+      <div class="stage" id="stage">
+        <svg id="svg" viewBox="0 0 640 380" role="img" aria-label="Gráfico de dos líneas: intensidad de cinco sensaciones, vivida en el pasado y recordada en el presente"></svg>
+      </div>
+    </div>
+    <div class="sidecol">
+      <div class="panel" id="panel">
+        <p class="ph" id="ph"></p>
+        <span class="name" id="pname"></span>
+        <div class="counts" id="pcounts"></div>
+        <p class="desc" id="pdesc"></p>
+        <div class="readout" id="preadout">
+          <p class="readout-title">Registro de la fuga</p>
+          <div class="rline"><span class="rlabel">Perdido</span><span class="rval" id="rlost"></span></div>
+          <div class="rline"><span class="rlabel">Retiene</span><span class="rval big" id="rpct"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  const NS = 'http://www.w3.org/2000/svg';
+  const $ = id => document.getElementById(id);
+  const svg = $('svg'), panel = $('panel'), phEl = $('ph'), nameEl = $('pname'), countsEl = $('pcounts'), descEl = $('pdesc');
+  const lostEl = $('rlost'), pctEl = $('rpct');
+
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const CATS = [
+    { key: 'sonidos', lines: ['Sonidos'], vivido: 9, recordado: 4,
+      desc: 'El eco se queda, pero el volumen ya no es el mismo.' },
+    { key: 'calor', lines: ['Calor del', 'ambiente'], vivido: 8, recordado: 3,
+      desc: 'El calor en la piel se enfría antes que el recuerdo se apague del todo.' },
+    { key: 'olores', lines: ['Olores'], vivido: 7, recordado: 2,
+      desc: 'El olfato es el primero en rendirse ante el tiempo.' },
+    { key: 'emociones', lines: ['Emociones'], vivido: 10, recordado: 5,
+      desc: 'Lo que sintió sigue ahí, aunque mucho más tenue.' },
+    { key: 'voces', lines: ['Voces de la', 'gente'], vivido: 9, recordado: 4,
+      desc: 'Las palabras se difuminan; queda apenas el tono.' }
+  ];
+
+  function el(tag, attrs) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  // ---------- Geometría del gráfico ----------
+  const VB_W = 640, VB_H = 380;
+  const PLOT_L = 58, PLOT_R = 612, PLOT_TOP = 40, PLOT_BOTTOM = 300;
+  const PLOT_W = PLOT_R - PLOT_L, PLOT_H = PLOT_BOTTOM - PLOT_TOP;
+  const Y_MAX = 10, Y_TICKS = [0, 2, 4, 6, 8, 10];
+  const pxPerUnit = PLOT_H / Y_MAX;
+  const yOf = v => PLOT_BOTTOM - v * pxPerUnit;
+
+  const slotW = PLOT_W / CATS.length;
+  const xOf = i => PLOT_L + slotW * i + slotW / 2;
+
+  let colEls = [];
+  let segEls = [];
+  let visited = new Set();
+  let activeKey = null;
+  let plotRoot = null;
+
+  function build() {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    const defs = el('defs', {});
+    const grad = el('linearGradient', { id: 'leakGrad', x1: '0', y1: '0', x2: '0', y2: '1' });
+    grad.appendChild(el('stop', { offset: '0%', 'stop-color': 'var(--warm)' }));
+    grad.appendChild(el('stop', { offset: '100%', 'stop-color': 'var(--blue)' }));
+    defs.appendChild(grad);
+    svg.appendChild(defs);
+
+    // gridlines + eje y
+    const gGrid = el('g', { id: 'grid' });
+    Y_TICKS.forEach(v => {
+      const y = yOf(v);
+      gGrid.appendChild(el('line', { class: 'gridline', x1: PLOT_L, x2: PLOT_R, y1: y, y2: y }));
+      const lbl = el('text', { class: 'ylabel', x: PLOT_L - 10, y: y + 4, 'text-anchor': 'end' });
+      lbl.textContent = String(v);
+      gGrid.appendChild(lbl);
+    });
+    gGrid.appendChild(el('line', { class: 'axisline', x1: PLOT_L, x2: PLOT_R, y1: PLOT_BOTTOM, y2: PLOT_BOTTOM }));
+    svg.appendChild(gGrid);
+
+    plotRoot = el('g', { id: 'plotRoot' });
+
+    // "lo vivido" se dibuja completo de entrada: el pasado ya ocurrió, es un hecho fijo
+    const vivPts = CATS.map((c, i) => xOf(i) + ',' + yOf(c.vivido)).join(' L');
+    plotRoot.appendChild(el('path', { class: 'lineviv', d: 'M' + vivPts }));
+
+    // "lo recordado" no se dibuja: no existe ninguna pista de su forma hasta que una gota
+    // realmente caiga y aterrice ahí. Cada tramo aparece solo cuando sus dos extremos ya cayeron.
+    segEls = [];
+    for (let i = 0; i < CATS.length - 1; i++) {
+      const x1 = xOf(i), y1 = yOf(CATS[i].recordado);
+      const x2 = xOf(i + 1), y2 = yOf(CATS[i + 1].recordado);
+      const seg = el('path', { class: 'linerec-seg', d: 'M' + x1 + ',' + y1 + ' L' + x2 + ',' + y2 });
+      plotRoot.appendChild(seg);
+      segEls.push(seg);
+    }
+
+    CATS.forEach((cat, i) => {
+      const cx = xOf(i);
+      const yV = yOf(cat.vivido), yR = yOf(cat.recordado);
+      const gapPx = yR - yV; // distancia en px entre lo vivido y lo recordado
+
+      const g = el('g', { class: 'catcol' });
+
+      const hit = el('rect', {
+        class: 'hitrect', x: PLOT_L + slotW * i, y: PLOT_TOP - 14, width: slotW, height: (PLOT_BOTTOM - PLOT_TOP) + 60,
+        tabindex: '0', role: 'button',
+        'aria-label': cat.lines.join(' ') + ': intensidad vivida ' + cat.vivido + ' de 10, recordada ' + cat.recordado + ' de 10'
+      });
+      g.appendChild(hit);
+
+      // la fuga: línea guía + charco que crece + gotas cayendo (nacen naranjas, aterrizan azules)
+      const leak = el('g', { class: 'leak', style: '--dripDist:' + gapPx + 'px' });
+      leak.appendChild(el('line', { class: 'leak-line', x1: cx, x2: cx, y1: yV, y2: yR }));
+      leak.appendChild(el('rect', { class: 'leak-fill', x: cx - 5, y: yV, width: 10, height: gapPx }));
+      let firstDrop = null;
+      [0, 0.32, 0.64].forEach((delay, di) => {
+        const drop = el('circle', { class: 'drop', cx: cx, cy: yV, r: 3.2, style: 'animation-delay:' + delay + 's' });
+        leak.appendChild(drop);
+        if (di === 0) firstDrop = drop;
+      });
+      g.appendChild(leak);
+
+      // el recuerdo se forma recién cuando la primera gota completa su caída (no al instante de pasar el mouse)
+      firstDrop.addEventListener('animationiteration', () => revealMemory(cat.key), { once: true });
+
+      const ptRec = el('circle', { class: 'pt pt-rec', cx: cx, cy: yR, r: 5 });
+      g.appendChild(el('circle', { class: 'pt pt-viv', cx: cx, cy: yV, r: 5 }));
+      g.appendChild(ptRec);
+
+      const lblV = el('text', { class: 'vallabel vallabel-viv', x: cx, y: yV - 12 });
+      lblV.textContent = String(cat.vivido);
+      g.appendChild(lblV);
+      const lblR = el('text', { class: 'vallabel vallabel-rec', x: cx, y: yR + 20 });
+      lblR.textContent = String(cat.recordado);
+      g.appendChild(lblR);
+
+      const labelYStart = PLOT_BOTTOM + 22;
+      cat.lines.forEach((line, li) => {
+        const t = el('text', { class: 'catlabel', x: cx, y: labelYStart + li * 15 });
+        t.textContent = line;
+        g.appendChild(t);
+      });
+
+      plotRoot.appendChild(g);
+      colEls.push({ g, hit, cat, ptRec });
+    });
+
+    svg.appendChild(plotRoot);
+  }
+
+  // se llama cuando la primera gota de un sentido termina de caer: recién ahí "existe" el
+  // punto recordado, y el/los tramos de línea azul que llegan hasta él quedan formados para siempre
+  function revealMemory(key) {
+    if (visited.has(key)) return;
+    visited.add(key);
+    const idx = colEls.findIndex(e => e.cat.key === key);
+    if (idx === -1) return;
+    colEls[idx].ptRec.classList.add('visited');
+    if (idx > 0 && visited.has(colEls[idx - 1].cat.key)) segEls[idx - 1].classList.add('visited');
+    if (idx < colEls.length - 1 && visited.has(colEls[idx + 1].cat.key)) segEls[idx].classList.add('visited');
+  }
+
+  function showCat(key) {
+    const entry = colEls.find(e => e.cat.key === key);
+    if (!entry) return;
+    activeKey = key;
+    colEls.forEach(e => e.g.classList.toggle('active', e.cat.key === key));
+    plotRoot.classList.add('anyActive');
+
+    // sin la animación de la gota (movimiento reducido) el recuerdo se forma al instante
+    if (reducedMotion) revealMemory(key);
+
+    const c = entry.cat;
+    const lost = c.vivido - c.recordado;
+    const pct = Math.round((c.recordado / c.vivido) * 100);
+
+    panel.classList.add('active');
+    nameEl.textContent = c.lines.join(' ');
+    countsEl.innerHTML = 'Vivido: <b>' + c.vivido + '</b> · Recordado: <b>' + c.recordado + '</b>';
+    descEl.textContent = c.desc;
+    lostEl.textContent = lost + ' puntos de 10';
+    pctEl.textContent = pct + '%';
+  }
+
+  function clearCat() {
+    activeKey = null;
+    colEls.forEach(e => e.g.classList.remove('active'));
+    plotRoot.classList.remove('anyActive');
+    panel.classList.remove('active');
+  }
+
+  function attachEvents() {
+    if (coarse) {
+      svg.addEventListener('click', e => {
+        const hit = e.target.closest('.hitrect');
+        if (!hit) { clearCat(); return; }
+        const entry = colEls.find(x => x.hit === hit);
+        if (!entry) return;
+        if (entry.cat.key === activeKey) clearCat(); else showCat(entry.cat.key);
+      });
+    } else {
+      colEls.forEach(e => {
+        e.hit.addEventListener('pointerenter', () => showCat(e.cat.key));
+        e.hit.addEventListener('focus', () => showCat(e.cat.key));
+      });
+      svg.addEventListener('pointerleave', clearCat);
+      svg.addEventListener('focusout', ev => {
+        if (!svg.contains(ev.relatedTarget)) clearCat();
+      });
+    }
+    svg.addEventListener('keydown', e => {
+      if ((e.key === 'Enter' || e.key === ' ') && document.activeElement.classList.contains('hitrect')) {
+        e.preventDefault();
+        const entry = colEls.find(x => x.hit === document.activeElement);
+        if (!entry) return;
+        if (coarse || entry.cat.key !== activeKey) showCat(entry.cat.key); else clearCat();
+      }
+      if (e.key === 'Escape') clearCat();
+    });
+  }
+
+  phEl.textContent = coarse
+    ? 'Toca un sentido para ver cuánto se perdió con el tiempo.'
+    : 'Pasa el cursor por un sentido para ver cuánto se perdió con el tiempo.';
+
+  build();
+  attachEvents();
+})();
+</script>
+</body>
+</html>

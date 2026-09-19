@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Detrás del Silencio</title>
+<style>
+  :root {
+    --bg: #100f0d;
+    --surface: #1a1815;
+    --surface-raised: #221f1a;
+    --text-primary: #f5f2ea;
+    --text-secondary: #b9b2a4;
+    --text-muted: #837b6d;
+    --hairline: rgba(245, 242, 234, 0.10);
+    --accent: #c99a4e;
+
+    --ring-sin:        #57514a;
+    --ring-sin-icon:   #82796f;
+    --ring-con-simple: #8a7357;
+    --ring-con-hatch:  rgba(245, 242, 234, 0.09);
+
+    --c-ansiedad:   #3987e5;
+    --c-depresion:  #d95926;
+    --c-conducta:   #199e70;
+    --c-esquizo:    #c98500;
+    --c-otros:      #d55181;
+
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 56px 20px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  header.report {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    border-bottom: 1px solid var(--hairline);
+    padding-bottom: 28px;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  h1 {
+    font-family: "Newsreader", Georgia, serif;
+    font-weight: 500;
+    font-size: clamp(28px, 5vw, 40px);
+    line-height: 1.15;
+    margin: 0;
+    text-wrap: balance;
+    max-width: 22ch;
+  }
+
+  .dek {
+    color: var(--text-secondary);
+    font-size: 16px;
+    line-height: 1.55;
+    max-width: 56ch;
+    margin: 0;
+  }
+
+  .viz-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .ring-wrap {
+    position: relative;
+    width: min(100%, 440px);
+    aspect-ratio: 1 / 1;
+    touch-action: none;
+  }
+
+  .ring-wrap svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    overflow: visible;
+  }
+
+  #lensGroup {
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 160ms ease-out;
+  }
+  #lensGroup.visible { opacity: 1; }
+
+  #detailLayer {
+    opacity: 0;
+    transition: opacity 160ms ease-out;
+  }
+  #detailLayer.visible { opacity: 1; }
+
+  #lensRim {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2.2;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5));
+  }
+  #lensGlare {
+    fill: none;
+    stroke: rgba(255,255,255,0.35);
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+  #lensHandle {
+    stroke: var(--accent);
+    stroke-width: 4.5;
+    stroke-linecap: round;
+  }
+
+  .arc-base { transition: filter 160ms ease-out; }
+
+  .center-readout {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 0 17%;
+    pointer-events: none;
+  }
+
+  .center-readout .rest-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .center-readout .rest-stats .row {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .center-readout .rest-stats .row b {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+  .center-readout .rest-stats .row.con b { color: var(--ring-con-simple); }
+
+  .center-readout .focus-figure {
+    display: none;
+  }
+  .center-readout.focused .rest-stats { display: none; }
+  .center-readout.focused .focus-figure { display: block; }
+
+  .focus-figure .figure {
+    font-family: "IBM Plex Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(28px, 7.5vw, 40px);
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+  .focus-figure .figure small {
+    font-size: 0.4em;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-left: 2px;
+  }
+  .focus-figure .caption {
+    margin-top: 8px;
+    font-size: 12.5px;
+    line-height: 1.4;
+    color: var(--text-secondary);
+    max-width: 30ch;
+  }
+
+  .hint {
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+    max-width: 38ch;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 16px;
+    max-width: 540px;
+    font-size: 13px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--text-secondary);
+  }
+  .legend-swatch {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .legend-item .legend-pct {
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--text-primary);
+  }
+
+  footer.sources {
+    border-top: 1px solid var(--hairline);
+    padding-top: 20px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--text-muted);
+  }
+  footer.sources p { margin: 0; }
+  footer.sources a { color: var(--text-secondary); }
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="page">
+
+  <header class="report">
+    <div class="eyebrow">Colombia · MinSalud / SISPRO, 2015</div>
+    <h1>Lo que no se nota a simple vista</h1>
+    <p class="dek">
+      Casi la mitad de los niños de 7 a 11 años en Colombia debería ser evaluada por un
+      profesional de salud mental. De lejos, este anillo se ve como dos bloques de color —
+      acerca la lupa a cualquier parte para ver que, en realidad, está hecho de personas.
+    </p>
+  </header>
+
+  <div class="viz-block">
+    <div class="ring-wrap" id="ringWrap">
+      <svg id="ringSvg" viewBox="0 0 400 400" role="img" aria-label="Dona con dos arcos: 55.3% sin indicios de problema mental, 44.7% con indicios. Acercando el cursor con la lupa a cualquier parte del anillo se revela una multitud de personitas — dentro del arco con indicios, agrupadas por diagnóstico: ansiedad, depresión, trastorno de conducta, esquizofrenia y otros.">
+        <defs>
+          <symbol id="personIcon" viewBox="0 0 10 14">
+            <circle cx="5" cy="3.2" r="2.8"></circle>
+            <path d="M1 14 C1 8.6 2.6 7.3 5 7.3 C7.4 7.3 9 8.6 9 14 Z"></path>
+          </symbol>
+          <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="7" stroke="var(--ring-con-hatch)" stroke-width="2"></line>
+          </pattern>
+          <clipPath id="lensClip" clipPathUnits="userSpaceOnUse">
+            <circle id="lensClipCircle" cx="200" cy="45" r="52"></circle>
+          </clipPath>
+        </defs>
+
+        <!-- simple base layer: always visible -->
+        <g id="baseLayer"></g>
+
+        <!-- detailed layer: only visible inside the lens, drawn magnified -->
+        <g id="detailLayer" clip-path="url(#lensClip)">
+          <g id="detailContent"></g>
+        </g>
+
+        <!-- lens chrome -->
+        <g id="lensGroup">
+          <line id="lensHandle" x1="0" y1="0" x2="0" y2="0"></line>
+          <circle id="lensRim" cx="200" cy="45" r="52"></circle>
+          <path id="lensGlare" d=""></path>
+        </g>
+      </svg>
+
+      <div class="center-readout" id="centerReadout">
+        <div class="rest-stats">
+          <div class="row sin"><b>55.3%</b> sin indicios</div>
+          <div class="row con"><b>44.7%</b> con indicios</div>
+        </div>
+        <div class="focus-figure">
+          <div class="figure" id="focusFigure"></div>
+          <div class="caption" id="focusCaption"></div>
+        </div>
+      </div>
+    </div>
+
+    <p class="hint">Pasa el cursor (o el dedo) por cualquier parte del anillo — la lupa revela quiénes lo forman.</p>
+
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <footer class="sources">
+    <p>
+      El 44.7% / 55.3% proviene del <a href="https://www.minsalud.gov.co/sites/rid/Lists/BibliotecaDigital/RIDE/VS/PP/ENT/boletin-4-salud-mental-nna-2017.pdf" target="_blank" rel="noopener">Boletín de Salud Mental en Niños, Niñas y Adolescentes</a> (MinSalud / SISPRO, Encuesta Nacional de Salud Mental 2015).
+    </p>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  var CX = 200, CY = 200, R_OUT = 155, R_IN = 95;
+  var LENS_R = 52, ZOOM = 1.9;
+
+  var GROUPS = [
+    { key: 'ansiedad',  label: 'Ansiedad',               pct: 18,  color: 'var(--c-ansiedad)', icons: 18, phrase: 'sufren de ansiedad' },
+    { key: 'depresion', label: 'Depresión',              pct: 12,  color: 'var(--c-depresion)', icons: 12, phrase: 'sufren de depresión' },
+    { key: 'conducta',  label: 'Trastorno de conducta',  pct: 8,   color: 'var(--c-conducta)', icons: 8,  phrase: 'presentan un trastorno de conducta' },
+    { key: 'esquizo',   label: 'Esquizofrenia',          pct: 4,   color: 'var(--c-esquizo)', icons: 4,  phrase: 'presentan esquizofrenia' },
+    { key: 'otros',     label: 'Otros',                  pct: 2.7, color: 'var(--c-otros)', icons: 3,  phrase: 'presentan otro tipo de afección' }
+  ];
+  var SIN_PCT = 55.3;
+  var CON_PCT = 44.7;
+  var SIN_GROUP = { key: 'sin', label: 'Sin indicios', pct: SIN_PCT, color: 'var(--ring-sin)', iconColor: 'var(--ring-sin-icon)', icons: 55, phrase: 'no presentan indicios de un problema de salud mental' };
+  var ALL_GROUPS = [SIN_GROUP].concat(GROUPS);
+
+  function polar(cx, cy, r, deg) {
+    var rad = deg * Math.PI / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  }
+
+  function arcPath(cx, cy, rOut, rIn, startDeg, endDeg) {
+    var s1 = polar(cx, cy, rOut, startDeg), e1 = polar(cx, cy, rOut, endDeg);
+    var s2 = polar(cx, cy, rIn, endDeg), e2 = polar(cx, cy, rIn, startDeg);
+    var large = (endDeg - startDeg) > 180 ? 1 : 0;
+    return 'M ' + s1.x + ' ' + s1.y +
+      ' A ' + rOut + ' ' + rOut + ' 0 ' + large + ' 1 ' + e1.x + ' ' + e1.y +
+      ' L ' + s2.x + ' ' + s2.y +
+      ' A ' + rIn + ' ' + rIn + ' 0 ' + large + ' 0 ' + e2.x + ' ' + e2.y + ' Z';
+  }
+
+  function makePath(d, fill, cls) {
+    var p = document.createElementNS(SVGNS, 'path');
+    p.setAttribute('d', d);
+    p.setAttribute('fill', fill);
+    if (cls) p.setAttribute('class', cls);
+    return p;
+  }
+
+  // ---- geometry: walk every group (sin, then the 5 con conditions) around the ring ----
+  var SIN_START = -90, SIN_END = SIN_START + SIN_PCT * 3.6;
+  var CON_START = SIN_END, CON_END = CON_START + CON_PCT * 3.6; // = 270
+
+  var bounds = [];
+  (function () {
+    var a = SIN_START;
+    ALL_GROUPS.forEach(function (g) {
+      var b = a + g.pct * 3.6;
+      bounds.push({ key: g.key, start: a, end: b, group: g });
+      a = b;
+    });
+  })();
+
+  // ---- base (simple) layer: two clean arcs, always visible ----
+  var baseLayer = document.getElementById('baseLayer');
+  baseLayer.appendChild(makePath(arcPath(CX, CY, R_OUT, R_IN, SIN_START, SIN_END), 'var(--ring-sin)', 'arc-base'));
+  var conBase = makePath(arcPath(CX, CY, R_OUT, R_IN, CON_START, CON_END), 'var(--ring-con-simple)', 'arc-base');
+  baseLayer.appendChild(conBase);
+  var conHatch = makePath(arcPath(CX, CY, R_OUT, R_IN, CON_START, CON_END), 'url(#hatch)', 'arc-base');
+  baseLayer.appendChild(conHatch);
+
+  // ---- detail layer: a crowd of little people, magnified under the lens ----
+  // 100 angular slots (one contiguous block per group: 55 sin + 18/12/8/4/3
+  // con — a close approximation of the real percentages), each slot stacked
+  // 4-deep across the band's thickness, staggered brick-style, so the lens
+  // reveals a packed crowd rather than a single thin line of icons.
+  var detailContent = document.getElementById('detailContent');
+  var ICON_W = 6.6, ICON_H = 9.2;
+  var ROWS = 4;
+  var rowRadii = [];
+  for (var r = 0; r < ROWS; r++) rowRadii.push(R_IN + (r + 0.5) * (R_OUT - R_IN) / ROWS);
+
+  function addIcon(deg, radius, color) {
+    var p = polar(CX, CY, radius, deg);
+    var use = document.createElementNS(SVGNS, 'use');
+    use.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#personIcon');
+    use.setAttribute('href', '#personIcon');
+    use.setAttribute('x', p.x - ICON_W / 2);
+    use.setAttribute('y', p.y - ICON_H / 2);
+    use.setAttribute('width', ICON_W);
+    use.setAttribute('height', ICON_H);
+    use.setAttribute('fill', color);
+    detailContent.appendChild(use);
+  }
+
+  var iconIndex = 0;
+  ALL_GROUPS.forEach(function (g) {
+    for (var i = 0; i < g.icons; i++) {
+      var baseDeg = SIN_START + (iconIndex + 0.5) * 3.6;
+      for (var row = 0; row < ROWS; row++) {
+        var stagger = (row % 2) ? 1.8 : 0;
+        addIcon(baseDeg + stagger, rowRadii[row], g.iconColor || g.color);
+      }
+      iconIndex++;
+    }
+  });
+
+  // ---- legend (static, read-at-rest) — names only, no numbers: the exact
+  // percentage stays a small find, revealed only by exploring with the lens ----
+  var legend = document.getElementById('legend');
+  function legendRow(color, label) {
+    var item = document.createElement('div');
+    item.className = 'legend-item';
+    item.innerHTML = '<span class="legend-swatch" style="background:' + color + '"></span>' +
+      '<span>' + label + '</span>';
+    legend.appendChild(item);
+  }
+  ALL_GROUPS.forEach(function (g) { legendRow(g.color, g.label); });
+
+  // ---- lens interaction ----
+  var lensClipCircle = document.getElementById('lensClipCircle');
+  var lensGroup = document.getElementById('lensGroup');
+  var lensRim = document.getElementById('lensRim');
+  var lensHandle = document.getElementById('lensHandle');
+  var lensGlare = document.getElementById('lensGlare');
+  var detailLayer = document.getElementById('detailLayer');
+  var centerReadout = document.getElementById('centerReadout');
+  var focusFigure = document.getElementById('focusFigure');
+  var focusCaption = document.getElementById('focusCaption');
+  var ringWrap = document.getElementById('ringWrap');
+  var ringSvg = document.getElementById('ringSvg');
+
+  var BAND_PAD = 26; // how far off the ring band the lens still engages
+
+  function angleInRange(angle, start, end) {
+    return angle >= start && angle <= end;
+  }
+
+  function setFocus(key) {
+    if (!key) {
+      centerReadout.classList.remove('focused');
+      return;
+    }
+    centerReadout.classList.add('focused');
+    var g = ALL_GROUPS.filter(function (x) { return x.key === key; })[0];
+    focusFigure.innerHTML = (g.pct % 1 === 0 ? g.pct : g.pct.toFixed(1)) + '<small>%</small>';
+    focusCaption.textContent = 'de los niños de 7 a 11 años ' + g.phrase;
+  }
+
+  function hideLens() {
+    lensGroup.classList.remove('visible');
+    detailLayer.classList.remove('visible');
+    setFocus(null);
+  }
+
+  function updateLens(px, py) {
+    var dx = px - CX, dy = py - CY;
+    var dist = Math.hypot(dx, dy);
+    var raw = Math.atan2(dy, dx) * 180 / Math.PI;
+    var angle = raw < -90 ? raw + 360 : raw;
+
+    var onBand = dist > R_IN - BAND_PAD && dist < R_OUT + BAND_PAD;
+
+    if (!onBand) { hideLens(); return; }
+
+    var midR = (R_IN + R_OUT) / 2;
+    var lx = CX + midR * Math.cos(angle * Math.PI / 180);
+    var ly = CY + midR * Math.sin(angle * Math.PI / 180);
+
+    lensClipCircle.setAttribute('cx', lx);
+    lensClipCircle.setAttribute('cy', ly);
+    lensRim.setAttribute('cx', lx);
+    lensRim.setAttribute('cy', ly);
+
+    // glare: a short arc near the upper-left of the lens rim
+    var g1 = polar(lx, ly, LENS_R - 6, -160);
+    var g2 = polar(lx, ly, LENS_R - 6, -110);
+    lensGlare.setAttribute('d', 'M ' + g1.x + ' ' + g1.y + ' A ' + (LENS_R - 6) + ' ' + (LENS_R - 6) + ' 0 0 1 ' + g2.x + ' ' + g2.y);
+
+    // handle: sticks out to the lower-right of the rim
+    var h1 = polar(lx, ly, LENS_R, 45);
+    var h2 = polar(lx, ly, LENS_R + 26, 45);
+    lensHandle.setAttribute('x1', h1.x); lensHandle.setAttribute('y1', h1.y);
+    lensHandle.setAttribute('x2', h2.x); lensHandle.setAttribute('y2', h2.y);
+
+    // magnify the detail content about the lens center
+    var s = ZOOM;
+    var tx = lx * (1 - s), ty = ly * (1 - s);
+    detailContent.setAttribute('transform', 'translate(' + tx + ',' + ty + ') scale(' + s + ')');
+
+    lensGroup.classList.add('visible');
+    detailLayer.classList.add('visible');
+
+    var hit = bounds.filter(function (b) { return angleInRange(angle, b.start, b.end); })[0];
+    setFocus(hit ? hit.key : null);
+  }
+
+  function toSvgCoords(clientX, clientY) {
+    var rect = ringSvg.getBoundingClientRect();
+    var scale = 400 / rect.width;
+    return { x: (clientX - rect.left) * scale, y: (clientY - rect.top) * scale };
+  }
+
+  var raf = null, pending = null;
+  function schedule(x, y) {
+    pending = { x: x, y: y };
+    if (raf) return;
+    raf = requestAnimationFrame(function () {
+      raf = null;
+      if (pending) updateLens(pending.x, pending.y);
+    });
+  }
+
+  ringWrap.addEventListener('pointermove', function (e) {
+    var p = toSvgCoords(e.clientX, e.clientY);
+    schedule(p.x, p.y);
+  });
+  ringWrap.addEventListener('pointerdown', function (e) {
+    var p = toSvgCoords(e.clientX, e.clientY);
+    schedule(p.x, p.y);
+  });
+  ringWrap.addEventListener('pointerleave', function () {
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+    pending = null;
+    hideLens();
+  });
+})();
+</script>
+</body>
+</html>

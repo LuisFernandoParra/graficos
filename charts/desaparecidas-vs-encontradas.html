@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Personas desaparecidas vs. personas encontradas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,600&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* Página oscura a propósito en cualquier tema: como un cuarto de revelado.
+     Los colores viven como variables para poder ajustarlos fácil. */
+  :root{
+    --bg:#090c13;
+    --ink:#eef1f7;
+    --muted:#8f97ab;
+    --blue:#3b7cf0;
+    --warm:#ffb37a;
+    --chip:rgba(255,255,255,.08);
+    --serif:'Newsreader',Georgia,'Times New Roman',serif;
+    --sans:'Instrument Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:980px;margin:0 auto;padding:40px 20px 56px}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(26px,4.2vw,40px);line-height:1.1;margin:0 0 12px;letter-spacing:-.01em}
+  .sub{margin:0;color:var(--muted);max-width:64ch;line-height:1.55;font-size:15px}
+
+  .controls{margin:26px 0 10px}
+  .pill{font:500 14px var(--sans);color:var(--ink);background:var(--chip);border:0;border-radius:999px;padding:9px 20px;cursor:pointer}
+  .pill:hover{background:rgba(255,255,255,.14)}
+  .pill:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  .hint{color:var(--muted);font-size:14px;margin:0 0 6px;min-height:3em;line-height:1.5;max-width:72ch}
+
+  .stage{position:relative;width:100%;height:520px;touch-action:none;user-select:none;-webkit-user-select:none}
+  .stage canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+  @media (pointer:fine){.stage{cursor:none}}
+
+  .num{position:absolute;transform:translate(-50%,-100%);text-align:center;pointer-events:none;white-space:nowrap}
+  .num .big{display:block;font-family:var(--serif);font-weight:600;font-size:clamp(32px,6.2vw,56px);line-height:1;letter-spacing:-.02em}
+  .num .small{display:block;margin-top:8px;font-size:13px;line-height:1.4;color:var(--muted);white-space:normal}
+  .num-found .big,.num-merged .w{color:var(--warm)}
+  .num-merged{width:min(92%,470px)}
+  .cat,.counter{position:absolute;transform:translateX(-50%);text-align:center;color:var(--muted);font-size:13px;line-height:1.3;max-width:44%;pointer-events:none}
+  .counter{max-width:90%;color:var(--warm);font-variant-numeric:tabular-nums}
+
+  /* Cambio entre las dos vistas */
+  .fade{transition:opacity .45s ease}
+  .m-ui{opacity:0}
+  .stage.merged .m-ui{opacity:1;transition-delay:1.5s}
+  .stage.merged .b-ui{opacity:0}
+  #grid{transition:opacity .6s ease}
+  .stage.merged #grid{opacity:0}
+
+  .foot{margin:18px 0 0;color:var(--muted);font-size:13px;line-height:1.6;max-width:68ch}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>Personas desaparecidas vs. personas encontradas</h1>
+  <p class="sub">Se comparan dos cifras de la UBPD (Unidad de Búsqueda de Personas dadas por Desaparecidas) en Colombia frente a las personas que se encontraron.</p>
+
+  <div class="controls">
+    <button type="button" class="pill" id="toggle" aria-pressed="false">Juntar</button>
+  </div>
+  <p class="hint" id="hint"></p>
+
+  <div class="stage" id="stage" role="img" aria-label="Gráfico hecho con personas: 132.877 personas dadas por desaparecidas frente a 160 personas encontradas. Al juntarlas, las 160 quedan mezcladas entre las 132.877, el 0,12 %.">
+    <canvas id="grid"></canvas>
+    <canvas id="crowd"></canvas>
+    <canvas id="fx"></canvas>
+    <div class="num b-ui fade" id="numMissing"><span class="big">132.877</span></div>
+    <div class="num num-found b-ui fade" id="numFound"><span class="big">160</span></div>
+    <div class="cat b-ui fade" id="catMissing">personas dadas por desaparecidas</div>
+    <div class="cat b-ui fade" id="catFound">personas encontradas</div>
+    <div class="num num-merged m-ui fade" id="numMerged">
+      <span class="big"><span class="w">160</span> de 132.877</span>
+      <span class="small">personas encontradas: apenas el 0,12 %, cerca de 1 de cada 830.</span>
+    </div>
+    <div class="counter m-ui fade" id="counter"></div>
+  </div>
+
+  <p class="foot">Cada punto es una persona. Las 160 encontradas están dibujadas a la misma escala que las demás, por eso son apenas una línea; aquí se resaltan para que se alcancen a ver. Fuente de las cifras: UBPD.</p>
+</main>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ---------- Datos ---------- */
+  const MISSING = 132877;
+  const FOUND = 160;
+  const AXIS_MAX = 140000;
+
+  /* ---------- Ajustes visuales ---------- */
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PALETTE = ['#2c62c9', '#3b7cf0', '#4d8dff', '#3369d6'];        // multitud vista de lejos
+  const LENS_COLORS = ['#8fb8ff', '#a9c8ff', '#7aa9ff', '#bcd4ff'];    // personas dentro de la lupa (más claras)
+  const WARM = '#ffb37a';
+  const LENS_R = coarse ? 21 : 24;        // radio de la lupa (px): súbelo o bájalo para hacerla más grande o más pequeña
+  const FIG_BARS = coarse ? 14 : 16;      // tamaño de cada persona en la lupa, vista de barras
+  const FIG_MERGED = coarse ? 17 : 22;    // ídem, vista juntas (más grandes = ves menos personas a la vez)
+  const LIFT = coarse ? LENS_R + 30 : 0;  // en celular la lupa sube para que el dedo no la tape
+  const DURATION = reduceMotion ? 350 : 2400; // ms que dura el paso de una vista a otra
+  const TAU = Math.PI * 2;
+
+  /* ---------- Utilidades ---------- */
+  const $ = id => document.getElementById(id);
+  const fmt = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const ease = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const mix = (a, b, t) => 'rgb(' + [0, 1, 2].map(i => Math.round(a[i] + (b[i] - a[i]) * t)).join(',') + ')';
+  const LENS_RGB = LENS_COLORS.map(hex2rgb), WARM_RGB = hex2rgb(WARM), BLUE_RGB = hex2rgb(PALETTE[1]);
+
+  /* ---------- Elementos ---------- */
+  const stage = $('stage');
+  const cGrid = $('grid'), cCrowd = $('crowd'), cFx = $('fx');
+  const gctx = cGrid.getContext('2d');
+  const kctx = cCrowd.getContext('2d');
+  const fctx = cFx.getContext('2d');
+  const elNumMissing = $('numMissing'), elNumFound = $('numFound');
+  const elCatMissing = $('catMissing'), elCatFound = $('catFound');
+  const elNumMerged = $('numMerged'), elCounter = $('counter');
+  const btn = $('toggle'), hintEl = $('hint');
+
+  /* ---------- Las personas (se generan una sola vez) ---------- */
+  const shade = new Uint8Array(MISSING);              // tono de cada persona
+  for (let i = 0; i < MISSING; i++) shade[i] = (Math.random() * 4) | 0;
+
+  const foundMap = new Map();                         // índice de persona -> número de encontrada
+  const foundIdx = new Int32Array(FOUND);
+  while (foundMap.size < FOUND) {
+    const i = (Math.random() * MISSING) | 0;
+    if (!foundMap.has(i)) { foundIdx[foundMap.size] = i; foundMap.set(i, foundMap.size); }
+  }
+  const discovered = new Uint8Array(FOUND);           // cuáles ha descubierto la lupa
+  let discoveredCount = 0;
+
+  const stag = new Float32Array(FOUND), arcH = new Float32Array(FOUND);
+  for (let k = 0; k < FOUND; k++) { stag[k] = Math.random(); arcH[k] = 40 + Math.random() * 70; }
+  const fu = new Float32Array(FOUND), fv = new Float32Array(FOUND); // dónde cae cada encontrada en el bloque
+
+  /* ---------- Estado ---------- */
+  let dpr = 1, W = 0, H = 0, L = null;
+  let geoB = null, geoM = null, rasterB = null, rasterM = null;
+  let p = 0, pTarget = 0, lastT = 0;   // p: 0 = barras, 1 = juntas
+  let active = false, px = 0, py = 0;
+
+  /* ---------- Layout ---------- */
+  function layout() {
+    W = stage.clientWidth;
+    H = Math.round(clamp(W * 0.66, 440, 640));
+    stage.style.height = H + 'px';
+    dpr = Math.min(window.devicePixelRatio || 1, 3);
+    [cGrid, cCrowd, cFx].forEach(c => {
+      c.width = Math.round(W * dpr);
+      c.height = Math.round(H * dpr);
+    });
+    const left = W < 520 ? 46 : 66, right = 12, top = 100, bottom = 56;
+    const plotW = W - left - right, plotH = H - top - bottom;
+    const baseY = H - bottom;
+    const colW = plotW / 2;
+    const bw = Math.min(colW * 0.68, 340);
+    L = {
+      left, right, top, bottom, plotW, plotH, baseY, colW, bw,
+      bxL: left + (colW - bw) / 2,
+      bxR: left + colW + (colW - bw) / 2,
+      bhL: MISSING / AXIS_MAX * plotH,
+      bhR: FOUND / AXIS_MAX * plotH
+    };
+  }
+
+  const yOf = v => L.baseY - v / AXIS_MAX * L.plotH;
+
+  function drawGrid() {
+    if (!L) return;
+    gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    gctx.clearRect(0, 0, W, H);
+    gctx.font = '12px "Instrument Sans", system-ui, sans-serif';
+    gctx.textBaseline = 'middle';
+    gctx.textAlign = 'right';
+    [0, 50000, 100000].forEach(v => {
+      const y = Math.round(yOf(v)) + 0.5;
+      gctx.strokeStyle = v === 0 ? 'rgba(255,255,255,.30)' : 'rgba(255,255,255,.08)';
+      gctx.lineWidth = 1;
+      gctx.beginPath();
+      gctx.moveTo(L.left, y);
+      gctx.lineTo(W - L.right, y);
+      gctx.stroke();
+      gctx.fillStyle = '#8f97ab';
+      gctx.fillText(fmt(v), L.left - 10, y);
+    });
+  }
+
+  /* ---------- Geometría de la multitud (una celda = una persona) ---------- */
+  function makeGeo(bx, w, h, baseY, fig) {
+    const cols = Math.max(1, Math.round(Math.sqrt(MISSING * w / h)));
+    const rowsExact = MISSING / cols;
+    const cw = w / cols, ch = h / rowsExact;
+    const topRows = Math.floor((MISSING - 1) / cols) + 1;
+    const top = baseY - topRows * ch;
+    return {
+      bx, w, h, baseY, cols, rowsExact, cw, ch, top, fig,
+      rect: { x: bx, y: top, w, h: baseY - top },
+      Z: clamp(fig / Math.min(cw, ch), 6, 80)
+    };
+  }
+
+  function makeRaster(g) {
+    const cv = document.createElement('canvas');
+    cv.width = cCrowd.width;
+    cv.height = cCrowd.height;
+    const ctx = cv.getContext('2d');
+    for (let k = 0; k < 4; k++) {
+      ctx.fillStyle = PALETTE[k];
+      for (let i = 0; i < MISSING; i++) {
+        if (shade[i] !== k) continue;
+        const col = i % g.cols, row = (i / g.cols) | 0;
+        const x0 = Math.round((g.bx + col * g.cw) * dpr);
+        const x1 = Math.round((g.bx + (col + 1) * g.cw) * dpr);
+        const y1 = Math.round((g.baseY - row * g.ch) * dpr);
+        const y0 = Math.round((g.baseY - (row + 1) * g.ch) * dpr);
+        if (x1 > x0 && y1 > y0) ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+      }
+    }
+    return cv;
+  }
+
+  function blitSteady() {
+    kctx.setTransform(1, 0, 0, 1, 0, 0);
+    kctx.globalAlpha = 1;
+    kctx.clearRect(0, 0, cCrowd.width, cCrowd.height);
+    kctx.drawImage(p >= 1 ? rasterM : rasterB, 0, 0);
+  }
+
+  /* ---------- Textos sobre el gráfico ---------- */
+  function placeLabels() {
+    const cxL = L.bxL + L.bw / 2, cxR = L.bxR + L.bw / 2;
+    elNumMissing.style.left = cxL + 'px';
+    elNumMissing.style.top = (geoB.top - 14) + 'px';
+    elNumFound.style.left = cxR + 'px';
+    elNumFound.style.top = (L.baseY - 46) + 'px';
+    elCatMissing.style.left = cxL + 'px';
+    elCatMissing.style.top = (L.baseY + 14) + 'px';
+    elCatFound.style.left = cxR + 'px';
+    elCatFound.style.top = (L.baseY + 14) + 'px';
+    const cxM = geoM.bx + geoM.w / 2;
+    elNumMerged.style.left = cxM + 'px';
+    elNumMerged.style.top = (geoM.top - 14) + 'px';
+    elCounter.style.left = cxM + 'px';
+    elCounter.style.top = (L.baseY + 14) + 'px';
+  }
+
+  function updateCounter() {
+    elCounter.textContent = 'Has dado con ' + discoveredCount + ' de las ' + FOUND + ' personas encontradas.';
+  }
+
+  function setHint() {
+    const gesto = coarse ? 'Arrastra el dedo' : 'Pasa el cursor';
+    if (pTarget === 0) {
+      hintEl.textContent = gesto + ' sobre las columnas para acercarte: cada punto es una persona. Acércalo también a la línea ámbar de la derecha.';
+    } else {
+      hintEl.textContent = 'Ahora están todas juntas. ' + gesto + ' por el bloque: entre las 132.877 hay 160 personas encontradas mezcladas, y solo se revelan en el centro de la lupa.';
+    }
+  }
+
+  /* ---------- Figura de una persona ---------- */
+  function rrect(ctx, x, y, w, h, r) {
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h);
+    ctx.lineTo(x, y + h);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+  }
+  // (x, y) es el centro de la figura; s es su alto aproximado
+  function person(ctx, x, y, s) {
+    const hr = s * 0.19, bw = s * 0.58, bh = s * 0.5;
+    ctx.beginPath();
+    ctx.arc(x, y - s * 0.27, hr, 0, TAU);
+    ctx.fill();
+    ctx.beginPath();
+    rrect(ctx, x - bw / 2, y - s * 0.04, bw, bh, bw * 0.4);
+    ctx.fill();
+  }
+
+  /* ---------- Lupa ---------- */
+  function drawLens() {
+    const merged = p >= 1;
+    const g = merged ? geoM : geoB;
+    const R = LENS_R, Z = g.Z, FIG = g.fig;
+    const lx = px, ly = py - LIFT;                 // centro de la lupa
+    const rs = (R + FIG * 0.6) / Z, rs2 = rs * rs; // radio de búsqueda en el gráfico real
+    const d = g.baseY - ly;                        // distancia vertical a la línea de base
+
+    fctx.save();
+    fctx.beginPath();
+    fctx.arc(lx, ly, R, 0, TAU);
+    fctx.clip();
+    fctx.fillStyle = '#070a10';
+    fctx.fillRect(lx - R, ly - R, R * 2, R * 2);
+
+    // línea de base ampliada
+    const by = ly + d * Z;
+    if (Math.abs(by - ly) < R + 2) {
+      fctx.strokeStyle = 'rgba(255,255,255,.22)';
+      fctx.lineWidth = 1;
+      fctx.beginPath();
+      fctx.moveTo(lx - R, by);
+      fctx.lineTo(lx + R, by);
+      fctx.stroke();
+    }
+
+    // una figura por celda
+    const c0 = Math.max(0, Math.floor((lx - rs - g.bx) / g.cw));
+    const c1 = Math.min(g.cols - 1, Math.ceil((lx + rs - g.bx) / g.cw));
+    const r0 = Math.max(0, Math.floor((g.baseY - (ly + rs)) / g.ch));
+    const r1 = Math.min(Math.ceil(g.rowsExact), Math.ceil((g.baseY - (ly - rs)) / g.ch));
+    for (let r = r0; r <= r1; r++) {
+      const dy = (g.baseY - (r + 0.5) * g.ch) - ly;
+      for (let c = c0; c <= c1; c++) {
+        const i = r * g.cols + c;
+        if (i >= MISSING) break;
+        const dx = (g.bx + (c + 0.5) * g.cw) - lx;
+        if (dx * dx + dy * dy > rs2) continue;
+        const sx = lx + dx * Z, sy = ly + dy * Z;
+        const k = merged ? foundMap.get(i) : undefined;
+        if (k === undefined) {
+          fctx.fillStyle = LENS_COLORS[shade[i]];
+          person(fctx, sx, sy, FIG);
+        } else {
+          // una encontrada escondida: se "revela" (pasa de azul a ámbar) al llegar al centro de la lupa
+          const dist = Math.hypot(dx * Z, dy * Z);
+          const t = clamp((R - dist) / (0.4 * R), 0, 1);
+          if (t > 0.95 && !discovered[k]) { discovered[k] = 1; discoveredCount++; updateCounter(); }
+          fctx.fillStyle = mix(LENS_RGB[shade[i]], WARM_RGB, t);
+          fctx.shadowColor = WARM;
+          fctx.shadowBlur = 10 * t;
+          person(fctx, sx, sy, FIG);
+          fctx.shadowBlur = 0;
+        }
+      }
+    }
+
+    // encontradas en la vista de barras: la línea es muy delgada y difícil de apuntar,
+    // así que aparecen poco a poco al acercarte a ella, de pie sobre su base
+    if (!merged) {
+      const near = clamp(1 - (d - 40) / 60, 0, 1) * clamp((d + 24) / 16, 0, 1);
+      if (near > 0) {
+        const cwF = L.bw / FOUND;
+        const sF = FIG * 1.05;
+        const foundBy = ly + clamp(d * Z, -R * 0.2, R * 0.62);
+        fctx.globalAlpha = near;
+        fctx.strokeStyle = 'rgba(255,179,122,.35)';
+        fctx.lineWidth = 1;
+        fctx.beginPath();
+        fctx.moveTo(lx - R, foundBy);
+        fctx.lineTo(lx + R, foundBy);
+        fctx.stroke();
+        fctx.fillStyle = WARM;
+        fctx.shadowColor = WARM;
+        fctx.shadowBlur = 8;
+        for (let k = 0; k < FOUND; k++) {
+          const dx = (L.bxR + (k + 0.5) * cwF) - lx;
+          if (Math.abs(dx) * Z > R + sF) continue;
+          person(fctx, lx + dx * Z, foundBy - sF * 0.46, sF);
+        }
+        fctx.shadowBlur = 0;
+        fctx.globalAlpha = 1;
+      }
+    }
+
+    // viñeta suave en el borde
+    const gr = fctx.createRadialGradient(lx, ly, R * 0.62, lx, ly, R);
+    gr.addColorStop(0, 'rgba(7,10,16,0)');
+    gr.addColorStop(1, 'rgba(7,10,16,.7)');
+    fctx.fillStyle = gr;
+    fctx.fillRect(lx - R, ly - R, R * 2, R * 2);
+    fctx.restore();
+
+    fctx.strokeStyle = 'rgba(255,255,255,.45)';
+    fctx.lineWidth = 1.5;
+    fctx.beginPath();
+    fctx.arc(lx, ly, R, 0, TAU);
+    fctx.stroke();
+  }
+
+  /* ---------- Las encontradas en barras: una línea tenue, siempre encendida ---------- */
+  function drawFound(t, a) {
+    const pulse = reduceMotion ? 0.8 : 0.6 + 0.4 * Math.sin(t / 650);
+    const cwF = L.bw / FOUND;
+    const h = Math.max(2.4, L.bhR);
+    fctx.save();
+    fctx.shadowColor = WARM;
+    fctx.shadowBlur = 8 + 10 * pulse;
+    fctx.globalAlpha = 0.3 * a;
+    fctx.fillStyle = WARM;
+    fctx.fillRect(L.bxR, L.baseY - h, L.bw, h);
+    fctx.restore();
+    fctx.save();
+    fctx.globalAlpha = a;
+    fctx.fillStyle = WARM;
+    for (let k = 0; k < FOUND; k++) {
+      fctx.fillRect(L.bxR + k * cwF + cwF * 0.18, L.baseY - h, cwF * 0.64, h);
+    }
+    const cx = L.bxR + L.bw / 2;
+    fctx.strokeStyle = 'rgba(255,179,122,.5)';
+    fctx.lineWidth = 1;
+    fctx.setLineDash([2, 4]);
+    fctx.beginPath();
+    fctx.moveTo(cx, L.baseY - h - 6);
+    fctx.lineTo(cx, L.baseY - 40);
+    fctx.stroke();
+    fctx.restore();
+  }
+
+  /* ---------- Paso de una vista a otra ---------- */
+  function lerpRect(a, b, e) {
+    return { x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e, w: a.w + (b.w - a.w) * e, h: a.h + (b.h - a.h) * e };
+  }
+  function drawCrop(src, r, R) {
+    kctx.drawImage(src, r.x * dpr, r.y * dpr, r.w * dpr, r.h * dpr, R.x * dpr, R.y * dpr, R.w * dpr, R.h * dpr);
+  }
+  // La multitud se transforma de columna a bloque (se funden las dos texturas)
+  function drawTransition() {
+    const e = ease(p);
+    const R = lerpRect(geoB.rect, geoM.rect, e);
+    kctx.setTransform(1, 0, 0, 1, 0, 0);
+    kctx.clearRect(0, 0, cCrowd.width, cCrowd.height);
+    if (e < 0.98) { kctx.globalAlpha = 1; drawCrop(rasterB, geoB.rect, R); }
+    if (e > 0.02) { kctx.globalAlpha = e; drawCrop(rasterM, geoM.rect, R); }
+    kctx.globalAlpha = 1;
+  }
+  // Las 160 encontradas viajan de su línea a un lugar cualquiera del bloque, y se pierden entre las demás
+  function drawFlying() {
+    const e = ease(p);
+    const R = lerpRect(geoB.rect, geoM.rect, e);
+    const cwF = L.bw / FOUND, hF = Math.max(2.4, L.bhR);
+    fctx.save();
+    fctx.shadowColor = WARM;
+    for (let k = 0; k < FOUND; k++) {
+      const q = ease(clamp((p - stag[k] * 0.4) / 0.6, 0, 1));
+      const sx = L.bxR + (k + 0.5) * cwF, sy = L.baseY - hF / 2;
+      const ex = R.x + fu[k] * R.w, ey = R.y + fv[k] * R.h;
+      const blend = clamp((q - 0.7) / 0.3, 0, 1);
+      fctx.shadowBlur = blend > 0.7 ? 0 : 6;
+      fctx.fillStyle = mix(WARM_RGB, BLUE_RGB, blend);
+      fctx.beginPath();
+      fctx.arc(sx + (ex - sx) * q, sy + (ey - sy) * q - Math.sin(Math.PI * q) * arcH[k], 2 - 0.6 * blend, 0, TAU);
+      fctx.fill();
+    }
+    fctx.restore();
+  }
+
+  /* ---------- Bucle ---------- */
+  function frame(t) {
+    const dt = Math.min(50, t - lastT || 16);
+    lastT = t;
+    if (L) {
+      if (p !== pTarget) {
+        const step = dt / DURATION;
+        p = pTarget > p ? Math.min(pTarget, p + step) : Math.max(pTarget, p - step);
+        if (p === pTarget) blitSteady(); else drawTransition();
+      }
+      fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      fctx.clearRect(0, 0, W, H);
+      const moving = p > 0 && p < 1;
+      const fa = 1 - clamp(p * 4, 0, 1);
+      if (fa > 0) drawFound(t, fa);
+      if (moving) drawFlying();
+      else if (active) drawLens();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- Entrada (mouse y dedo con los mismos eventos) ---------- */
+  function setPos(e) {
+    const r = cFx.getBoundingClientRect();
+    px = e.clientX - r.left;
+    py = e.clientY - r.top;
+  }
+  cFx.addEventListener('pointerdown', e => {
+    active = true; setPos(e);
+    if (e.pointerType !== 'mouse') { try { cFx.setPointerCapture(e.pointerId); } catch (_) {} }
+  });
+  cFx.addEventListener('pointermove', e => { active = true; setPos(e); });
+  cFx.addEventListener('pointerup', e => { if (e.pointerType !== 'mouse') active = false; });
+  cFx.addEventListener('pointercancel', () => { active = false; });
+  cFx.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') active = false; });
+
+  /* ---------- Botón Juntar / Separar ---------- */
+  btn.addEventListener('click', () => {
+    pTarget = pTarget === 0 ? 1 : 0;
+    stage.classList.toggle('merged', pTarget === 1);
+    btn.textContent = pTarget === 1 ? 'Separar' : 'Juntar';
+    btn.setAttribute('aria-pressed', String(pTarget === 1));
+    active = false;
+    setHint();
+  });
+
+  /* ---------- Arranque y cambios de tamaño ---------- */
+  function build() {
+    layout();
+    drawGrid();
+    geoB = makeGeo(L.bxL, L.bw, L.bhL, L.baseY, FIG_BARS);
+    const bwM = Math.min(L.plotW * 0.92, 780), bhM = L.plotH * 0.84;
+    geoM = makeGeo(L.left + (L.plotW - bwM) / 2, bwM, bhM, L.baseY, FIG_MERGED);
+    rasterB = makeRaster(geoB);
+    rasterM = makeRaster(geoM);
+    for (let k = 0; k < FOUND; k++) {
+      const idx = foundIdx[k];
+      const col = idx % geoM.cols, row = (idx / geoM.cols) | 0;
+      const cx = geoM.bx + (col + 0.5) * geoM.cw;
+      const cy = geoM.baseY - (row + 0.5) * geoM.ch;
+      fu[k] = (cx - geoM.rect.x) / geoM.rect.w;
+      fv[k] = (cy - geoM.rect.y) / geoM.rect.h;
+    }
+    placeLabels();
+    p = pTarget;
+    blitSteady();
+  }
+  let lastW = 0, resizeTimer = null;
+  function onResize() {
+    const w = stage.clientWidth;
+    if (w <= 0 || Math.abs(w - lastW) <= 1) return;
+    const first = lastW === 0;
+    lastW = w;
+    clearTimeout(resizeTimer);
+    // Se construye fuera del ciclo del observador: así el navegador no muestra
+    // el aviso "ResizeObserver loop completed with undelivered notifications".
+    resizeTimer = setTimeout(build, first ? 0 : 140);
+  }
+  if ('ResizeObserver' in window) new ResizeObserver(onResize).observe(stage);
+  else window.addEventListener('resize', onResize);
+  onResize();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawGrid);
+
+  updateCounter();
+  setHint();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
