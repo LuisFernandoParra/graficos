@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cada Pedazo de Cerca</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Newsreader:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+  :root{
+    --bg:#0a0a0c;
+    --ink:#eae6df;
+    --ink-dim:#9a978f;
+    --accent:#c98f8f;
+    --amber:#d1a35c;
+    --steel:#6d7c8c;
+    --panel:#141519;
+    --panel-edge:#232530;
+  }
+  *{box-sizing:border-box;}
+  html, body{ margin:0; padding:0; }
+  body{ background:var(--bg); color:var(--ink); font-family:'Newsreader', Georgia, serif; }
+  .wrap{ max-width:1180px; margin:0 auto; padding-inline:16px; padding-block:36px 56px; }
+  header{ margin-bottom:22px; max-width:680px; }
+  header h1{
+    font-family:'Special Elite', 'Courier New', monospace;
+    font-weight:400;
+    font-size:clamp(1.3rem, 2.6vw, 1.9rem);
+    margin:0 0 10px;
+  }
+  header .sub{ color:var(--ink-dim); font-size:0.98rem; line-height:1.5; margin:0 0 14px; transition:opacity .5s ease; }
+  header .sub.hidden{ opacity:0.45; }
+  .stage-frame{ max-width:560px; margin:0 auto; position:relative; }
+  .stage{
+    position:relative;
+    width:100%;
+    aspect-ratio:1/1;
+    background:#0a0a0c;
+    border-radius:6px;
+    box-shadow:0 0 0 1px var(--panel-edge), 0 30px 70px -30px rgba(0,0,0,0.85);
+    overflow:hidden;
+    touch-action:none;
+  }
+  .stage svg{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+  .wedge{ cursor:grab; }
+  .wedge path.fill{ stroke:rgba(10,10,12,0.7); stroke-width:2; }
+  .wedge text{
+    fill:rgba(10,10,12,0.62);
+    text-anchor:middle;
+    pointer-events:none;
+  }
+
+  .story-overlay{
+    position:absolute;
+    left:50%; top:50%;
+    transform:translate(-50%,-50%);
+    width:min(78%, 320px);
+    text-align:center;
+    opacity:0;
+    pointer-events:none;
+  }
+  .story-plate{
+    padding:16px 18px;
+    background:rgba(8,8,10,0.72);
+    border-radius:4px;
+    backdrop-filter:blur(1px);
+  }
+  .story-accent{
+    width:28px; height:3px; margin:0 auto 12px;
+    background:var(--story-color, var(--accent));
+  }
+  .story-overlay p{ font-size:0.96rem; line-height:1.6; color:var(--ink); font-style:italic; margin:0; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>¿Por qué dejó de usar la cámara de rollo?</h1>
+    <p class="sub" id="hintText">Tirá de una porción para hacer zoom y leer su historia. Empujala de vuelta hacia el centro para volver al pastel completo.</p>
+  </header>
+
+  <div class="stage-frame">
+    <div class="stage" id="stage">
+      <svg id="svgRoot" viewBox="0 0 640 640" preserveAspectRatio="xMidYMid meet">
+        <g id="world"></g>
+      </svg>
+      <div class="story-overlay" id="storyOverlay">
+        <div class="story-plate" id="storyPlate">
+          <div class="story-accent" id="storyAccent"></div>
+          <p id="storyTeaser"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var VB = 640, CX = 320, CY = 320, R = 195;
+  var MAX_ZOOM = 3.0;
+  var TEXT_IN_START = 0.42, TEXT_IN_END = 0.62;
+  var PCT_OUT_START = 0.22, PCT_OUT_END = 0.4;
+  var SIBLING_OUT_START = 0.12, SIBLING_OUT_END = 0.38;
+
+  var REASONS = [
+    { pct:40, color:'#6d7c8c', label:'El celular era más práctico',
+      teaser:'Un día sacó el teléfono en vez de la cámara. La foto salió igual, quizás mejor. Nadie lo notó — ni siquiera él.',
+      note:'Un día simplemente sacó el teléfono en vez de la cámara, y nadie lo notó — ni siquiera él. La foto salió igual, quizás mejor. No hubo una decisión consciente de dejar el rollo: solo, con el tiempo, dejó de ser la opción más rápida a mano.' },
+    { pct:25, color:'#9a978f', label:'Perdió el interés por revelar',
+      teaser:'Los rollos se quedaban semanas en el cajón. Cuando por fin los revelaba, la sorpresa ya no le sabía a sorpresa.',
+      note:'Revelar rollos empezó a sentirse como una tarea pendiente más. Los dejaba en un cajón semanas, a veces meses, hasta que ya ni recordaba qué había fotografiado. Cuando por fin los revelaba, la sorpresa ya no le sabía a sorpresa.' },
+    { pct:20, color:'#c98f8f', label:'Rencor hacia su papá',
+      teaser:'La cámara había sido de él antes que de nadie más. Usarla se sentía como seguir hablando con alguien de quien prefería no hablar.',
+      note:'La cámara había sido de él antes que de nadie más. Usarla era, de algún modo, seguir hablando con alguien de quien prefería no hablar. Guardarla en el fondo del clóset fue más fácil que decidir qué hacer con lo que representaba.' },
+    { pct:15, color:'#d1a35c', label:'Difícil conseguir rollos',
+      teaser:'El local de siempre cerró sin aviso. Conseguir un rollo nuevo se volvió una excursión en sí misma.',
+      note:'El local de siempre cerró sin aviso. Encontrar otro que revelara rollos de 35mm se volvió una excursión en sí misma. Con el tiempo, la cámara se quedó cargada con un rollo a medias, esperando un viaje que nunca se organizó.' }
+  ];
+
+  function pt(theta, radius){
+    return { x: CX + radius*Math.sin(theta), y: CY - radius*Math.cos(theta) };
+  }
+
+  var bounds = [];
+  (function(){
+    var acc = 0;
+    for (var i=0;i<REASONS.length;i++){
+      var start = acc/100*Math.PI*2;
+      acc += REASONS[i].pct;
+      var end = acc/100*Math.PI*2;
+      bounds.push({ start:start, end:end, bisector:(start+end)/2 });
+    }
+  })();
+
+  function wedgePathD(i){
+    var b = bounds[i];
+    var p0 = pt(b.start, R), p1 = pt(b.end, R);
+    var large = (b.end - b.start) > Math.PI ? 1 : 0;
+    return 'M ' + CX + ' ' + CY + ' L ' + p0.x.toFixed(2) + ' ' + p0.y.toFixed(2) +
+           ' A ' + R + ' ' + R + ' 0 ' + large + ' 1 ' + p1.x.toFixed(2) + ' ' + p1.y.toFixed(2) + ' Z';
+  }
+
+  function centroid(i){ return pt(bounds[i].bisector, R*0.6); }
+
+  var svg = document.getElementById('svgRoot');
+  var world = document.getElementById('world');
+  var hintText = document.getElementById('hintText');
+  var storyOverlay = document.getElementById('storyOverlay');
+  var storyAccent = document.getElementById('storyAccent');
+  var storyTeaser = document.getElementById('storyTeaser');
+
+  function ns(tag){ return document.createElementNS('http://www.w3.org/2000/svg', tag); }
+
+  // scratch element used only to measure rendered text width, so the motive
+  // label wraps to the actual glyphs instead of a guessed character count.
+  var measureEl = ns('text');
+  measureEl.setAttribute('x', -9999);
+  measureEl.setAttribute('y', -9999);
+  measureEl.style.opacity = 0;
+  svg.appendChild(measureEl);
+
+  function textWidth(str, fontSize, fontFamily, fontStyle){
+    measureEl.setAttribute('font-family', fontFamily);
+    measureEl.setAttribute('font-size', fontSize);
+    measureEl.setAttribute('font-style', fontStyle || 'normal');
+    measureEl.textContent = str;
+    return measureEl.getComputedTextLength();
+  }
+
+  function wrapLabel(str, maxWidth, fontSize, fontFamily, fontStyle){
+    var words = str.split(' ');
+    var lines = [];
+    var current = '';
+    words.forEach(function(w){
+      var test = current ? current + ' ' + w : w;
+      if (current && textWidth(test, fontSize, fontFamily, fontStyle) > maxWidth){
+        lines.push(current);
+        current = w;
+      } else {
+        current = test;
+      }
+    });
+    if (current) lines.push(current);
+    return lines;
+  }
+
+  var PCT_FONT_SIZE = 15, LABEL_FONT_SIZE = 10.5, LABEL_LINE_HEIGHT = 12.5;
+  var LABEL_FAMILY = "'Newsreader', Georgia, serif";
+  var PCT_FAMILY = "'Special Elite', monospace";
+
+  var wedgeEls = [], textEls = [];
+
+  REASONS.forEach(function(r,i){
+    var d = wedgePathD(i);
+    var g = ns('g');
+    g.setAttribute('class','wedge');
+    g.setAttribute('data-i', i);
+    var fillPath = ns('path');
+    fillPath.setAttribute('class','fill');
+    fillPath.setAttribute('d', d);
+    fillPath.setAttribute('fill', r.color);
+    fillPath.style.opacity = 0.9;
+    g.appendChild(fillPath);
+
+    var c = centroid(i);
+    var angle = bounds[i].end - bounds[i].start;
+    var maxWidth = Math.max(2 * (R*0.6) * Math.sin(angle/2) * 0.8, 56);
+    var labelLines = wrapLabel(r.label, maxWidth, LABEL_FONT_SIZE, LABEL_FAMILY, 'italic');
+
+    var txt = ns('text');
+    txt.setAttribute('text-anchor', 'middle');
+
+    var totalHeight = PCT_FONT_SIZE*0.85 + 5 + labelLines.length*LABEL_LINE_HEIGHT;
+    var pctY = c.y - totalHeight/2 + PCT_FONT_SIZE*0.75;
+
+    var pctSpan = ns('tspan');
+    pctSpan.setAttribute('x', c.x);
+    pctSpan.setAttribute('y', pctY);
+    pctSpan.setAttribute('font-family', PCT_FAMILY);
+    pctSpan.setAttribute('font-size', PCT_FONT_SIZE);
+    pctSpan.textContent = r.pct + '%';
+    txt.appendChild(pctSpan);
+
+    labelLines.forEach(function(line, li){
+      var lineSpan = ns('tspan');
+      lineSpan.setAttribute('x', c.x);
+      lineSpan.setAttribute('y', pctY + 5 + PCT_FONT_SIZE*0.3 + (li+1)*LABEL_LINE_HEIGHT);
+      lineSpan.setAttribute('font-family', LABEL_FAMILY);
+      lineSpan.setAttribute('font-style', 'italic');
+      lineSpan.setAttribute('font-size', LABEL_FONT_SIZE);
+      lineSpan.textContent = line;
+      txt.appendChild(lineSpan);
+    });
+    g.appendChild(txt);
+
+    world.appendChild(g);
+    wedgeEls.push(g);
+    textEls.push(txt);
+  });
+
+  var activeIndex = -1;
+  var pulled = 0; // 0..1 progress
+
+  function clamp01(x){ return x<0?0:(x>1?1:x); }
+  function smooth(t, a, b){ return clamp01((t-a)/(b-a)); }
+
+  function render(){
+    var f = pulled;
+    if (activeIndex < 0 || f <= 0){
+      world.removeAttribute('transform');
+    } else {
+      var focal = centroid(activeIndex);
+      var s = 1 + f*(MAX_ZOOM-1);
+      var A = (1-f) + f*s;
+      var Bx = f*CX - f*s*focal.x;
+      var By = f*CY - f*s*focal.y;
+      world.setAttribute('transform', 'matrix(' + A.toFixed(4) + ' 0 0 ' + A.toFixed(4) + ' ' + Bx.toFixed(2) + ' ' + By.toFixed(2) + ')');
+    }
+
+    for (var i=0;i<REASONS.length;i++){
+      if (i === activeIndex){
+        wedgeEls[i].style.opacity = 1;
+        wedgeEls[i].style.pointerEvents = 'auto';
+        var pctOpacity = 1 - smooth(f, PCT_OUT_START, PCT_OUT_END);
+        textEls[i].style.opacity = pctOpacity;
+      } else {
+        var sib = 1 - smooth(f, SIBLING_OUT_START, SIBLING_OUT_END);
+        wedgeEls[i].style.opacity = sib;
+        wedgeEls[i].style.pointerEvents = (f > 0.08) ? 'none' : 'auto';
+      }
+    }
+
+    if (activeIndex >= 0){
+      var r = REASONS[activeIndex];
+      var textIn = smooth(f, TEXT_IN_START, TEXT_IN_END);
+      storyOverlay.style.opacity = textIn;
+      storyAccent.style.setProperty('--story-color', r.color);
+      storyTeaser.textContent = r.teaser;
+    } else {
+      storyOverlay.style.opacity = 0;
+    }
+  }
+  render();
+
+  var dragging = -1;
+  var centerScreen = null;   // fixed screen-space position of the pie's own center
+  var restRadiusPx = 0;      // screen-space distance from center to this wedge's resting centroid
+  var maxPullPx = 200;
+
+  // Pull amount is measured as radial distance from the pie's center, in
+  // screen pixels — not projected onto a single fixed axis. That makes the
+  // gesture forgiving of whatever angle a real hand actually drags at:
+  // moving the cursor away from center (any direction) pulls the piece out,
+  // moving it back toward center (any direction) closes it again.
+  var stage = document.getElementById('stage');
+
+  wedgeEls.forEach(function(g, i){
+    g.addEventListener('pointerdown', function(e){
+      if (zeroAnimFrame !== null){
+        // a previous piece's snap-shut animation is still mid-flight —
+        // cancel it so it doesn't keep overwriting `pulled` every frame
+        // and fighting with this new drag.
+        cancelAnimationFrame(zeroAnimFrame);
+        zeroAnimFrame = null;
+      }
+      if (activeIndex >= 0 && activeIndex !== i){
+        // switching to a different piece mid-story: snap the previous one
+        // shut instantly so this one can start its own pull from zero.
+        pulled = 0;
+        activeIndex = i;
+        render();
+      }
+      dragging = i;
+      activeIndex = i;
+      hintText.classList.add('hidden');
+      try{ g.setPointerCapture(e.pointerId); }catch(err){}
+      var rect = stage.getBoundingClientRect();
+      var scale = rect.width / VB;
+      centerScreen = { x: rect.left + CX*scale, y: rect.top + CY*scale };
+      var c = centroid(i);
+      restRadiusPx = Math.hypot(rect.left + c.x*scale - centerScreen.x, rect.top + c.y*scale - centerScreen.y);
+      maxPullPx = rect.width * 0.42;
+      e.preventDefault();
+    });
+    g.addEventListener('pointermove', function(e){
+      if (dragging !== i) return;
+      var dist = Math.hypot(e.clientX - centerScreen.x, e.clientY - centerScreen.y);
+      var p = dist - restRadiusPx;
+      if (p < 0) p = 0;
+      if (p > maxPullPx) p = maxPullPx;
+      pulled = p / maxPullPx;
+      render();
+    });
+    function release(){
+      if (dragging !== i) return;
+      dragging = -1;
+      if (pulled < 0.09){
+        animateToZero();
+      }
+    }
+    g.addEventListener('pointerup', release);
+    g.addEventListener('pointercancel', release);
+  });
+
+  var zeroAnimFrame = null;
+  function animateToZero(){
+    var from = pulled;
+    var start = null, dur = 260;
+    function ease(t){ return 1 - Math.pow(1-t, 2); }
+    function frame(ts){
+      if (!start) start = ts;
+      var t = Math.min(1, (ts-start)/dur);
+      pulled = from * (1-ease(t));
+      render();
+      if (t < 1) { zeroAnimFrame = requestAnimationFrame(frame); }
+      else { zeroAnimFrame = null; activeIndex = -1; render(); }
+    }
+    zeroAnimFrame = requestAnimationFrame(frame);
+  }
+})();
+</script>
+</body>
+</html>
